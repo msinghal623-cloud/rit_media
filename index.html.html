@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>rit-media — compare India’s top stories across sources</title>
+  <meta name="description" content="Minimal demo: India’s top stories shown across multiple sources with visible framing, transparency cues, and full click tracking for GA4." />
+
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-3QKLH3B8N1"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-3QKLH3B8N1');
+  </script>
+
+  <style>
+    :root {
+      --bg: #f6f3ee;
+      --card: rgba(255,255,255,0.84);
+      --text: #101828;
+      --muted: #667085;
+      --line: rgba(16, 24, 40, 0.08);
+      --accent: #111827;
+      --shadow: 0 18px 50px rgba(16, 24, 40, 0.08);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --max: 1220px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(17, 24, 39, 0.05), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(100, 116, 139, 0.10), transparent 26%),
+        var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; }
+
+    .container {
+      width: min(var(--max), calc(100% - 28px));
+      margin: 0 auto;
+    }
+
+    .topbar {
+      padding: 18px 0 10px;
+    }
+
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,0.92);
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 24px rgba(16, 24, 40, 0.06);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+    }
+
+    .brand-copy h1 {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
+    .brand-copy p {
+      margin-top: 2px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .top-cta,
+    .interest-btn,
+    .source-pill,
+    .waitlist-btn,
+    .submit-btn,
+    .headline-btn {
+      border: 0;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .top-cta,
+    .waitlist-btn,
+    .submit-btn {
+      min-height: 46px;
+      padding: 12px 18px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: 0 14px 32px rgba(16, 24, 40, 0.15);
+    }
+
+    .top-cta:hover,
+    .interest-btn:hover,
+    .source-pill:hover,
+    .waitlist-btn:hover,
+    .submit-btn:hover,
+    .headline-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .hero {
+      padding: 8px 0 34px;
+    }
+
+    .hero-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 13px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.82);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .hero h2 {
+      font-size: clamp(2.3rem, 5.8vw, 4.9rem);
+      line-height: 0.95;
+      letter-spacing: -0.05em;
+      font-weight: 850;
+      max-width: 860px;
+    }
+
+    .hero-note {
+      margin-top: 10px;
+      font-size: 15px;
+      color: var(--muted);
+    }
+
+    .story-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .story-card,
+    .interest-panel,
+    .waitlist-panel {
+      border-radius: var(--radius-xl);
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .story-card {
+      padding: 18px;
+    }
+
+    .story-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .story-meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .score-chip,
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.9);
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .headline-btn {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      padding: 0;
+      color: var(--text);
+      font-size: clamp(1.35rem, 2vw, 1.7rem);
+      font-weight: 850;
+      line-height: 1.08;
+      letter-spacing: -0.04em;
+    }
+
+    .signal-row,
+    .source-row,
+    .interest-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .signal-row {
+      margin-top: 14px;
+    }
+
+    .tag {
+      background: rgba(17, 24, 39, 0.03);
+      color: var(--text);
+    }
+
+    .source-list {
+      margin-top: 16px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .source-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px;
+      border-radius: var(--radius-md);
+      background: rgba(255,255,255,0.92);
+      border: 1px solid rgba(16, 24, 40, 0.06);
+    }
+
+    .source-left {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .source-name {
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .source-framing {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .source-pill {
+      border-radius: 999px;
+      padding: 10px 13px;
+      background: #fff;
+      border: 1px solid var(--line);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .story-detail {
+      display: none;
+      margin-top: 14px;
+      padding: 14px;
+      border-radius: 16px;
+      background: rgba(17, 24, 39, 0.03);
+      border: 1px solid rgba(16, 24, 40, 0.05);
+      font-size: 14px;
+      color: var(--text);
+      line-height: 1.65;
+    }
+
+    .story-detail.open {
+      display: block;
+    }
+
+    .bottom-grid {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+    }
+
+    .interest-panel,
+    .waitlist-panel {
+      padding: 18px;
+    }
+
+    .section-kicker {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 800;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .interest-panel h3,
+    .waitlist-panel h3 {
+      font-size: clamp(1.45rem, 2vw, 1.9rem);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+      font-weight: 850;
+      margin-bottom: 14px;
+    }
+
+    .interest-btn {
+      border-radius: 18px;
+      padding: 16px;
+      text-align: left;
+      background: rgba(255,255,255,0.92);
+      border: 1px solid var(--line);
+      min-height: 82px;
+      flex: 1 1 220px;
+    }
+
+    .interest-btn strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    .interest-btn span {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .waitlist-copy {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 14px;
+    }
+
+    .waitlist-form {
+      display: none;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .waitlist-form.open {
+      display: flex;
+    }
+
+    .waitlist-form input {
+      flex: 1 1 240px;
+      min-width: 0;
+      height: 52px;
+      padding: 0 16px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.95);
+      font-size: 15px;
+      color: var(--text);
+      outline: none;
+    }
+
+    .thank-you {
+      display: none;
+      margin-top: 12px;
+      padding: 14px;
+      border-radius: 16px;
+      background: rgba(17, 24, 39, 0.05);
+      border: 1px solid rgba(16, 24, 40, 0.07);
+      font-size: 14px;
+      color: var(--text);
+    }
+
+    .footer {
+      padding: 18px 0 28px;
+    }
+
+    .footer p {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 980px) {
+      .story-grid,
+      .bottom-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .container {
+        width: min(var(--max), calc(100% - 22px));
+      }
+
+      .topbar-inner {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .top-cta,
+      .waitlist-btn,
+      .submit-btn {
+        width: 100%;
+      }
+
+      .source-item {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .source-pill {
+        width: 100%;
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar" id="topbar">
+    <div class="container topbar-inner">
+      <div class="brand" data-ui-label="brand">
+        <div class="brand-mark">RIT</div>
+        <div class="brand-copy">
+          <h1>rit-media</h1>
+          <p>same story • many sources • visible framing</p>
+        </div>
+      </div>
+      <button class="top-cta" id="topWaitlistBtn" data-ui-label="top_get_early_access">Get early access</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="hero">
+      <div class="container">
+        <div class="hero-head">
+          <div>
+            <div class="eyebrow">India demo • today’s top stories</div>
+            <h2>One story. Many sources. You decide.</h2>
+            <p class="hero-note">Open any headline. Open any source. Every click is tracked.</p>
+          </div>
+        </div>
+
+        <div class="story-grid">
+          <article class="story-card" id="story1" data-story="womens_reservation">
+            <div class="story-top">
+              <div class="story-meta">
+                <span>National</span>
+                <span>•</span>
+                <span>Apr 13</span>
+              </div>
+              <div class="score-chip">Transparency: medium-high</div>
+            </div>
+            <button class="headline-btn" data-target="detail1" data-ui-label="headline_womens_reservation">Special Parliament sitting puts women’s reservation implementation at the center</button>
+            <div class="signal-row">
+              <span class="tag">core: implementation push</span>
+              <span class="tag">framing shifts: process vs politics</span>
+              <span class="tag">missing context: delimitation</span>
+            </div>
+            <div class="source-list">
+              <div class="source-item">
+                <div class="source-left">
+                  <div class="source-name">The Hindu</div>
+                  <div class="source-framing">Institutional framing</div>
+                </div>
+                <a class="source-pill" href="https://www.thehindu.com/news/national/womens-reservation-act-will-realise-visions-of-past-fulfil-resolutions-of-future-pm-modi/article70856699.ece" target="_blank" rel="noopener" data-track="story1_thehindu">Open source ↗</a>
+              </div>
+              <div class="source-item">
+                <div class="source-left">
+                  <div class="source-name">Indian Express</div>
+                  <div class="source-framing">Procedural framing</div>
+                </div>
+                <a class="source-pill" href="https://indianexpress.com/article/india/parliament-modi-women-reservation-act-most-significant-21st-century-10633650/" target="_blank" rel="noopener" data-track="story1_indianexpress">Open source ↗</a>
+              </div>
+              <div class="source-item">
+                <div class="source-left">
+                  <div class="source-name">Hindustan Times</div>
+                  <div class="source-framing">Conflict framing</div>
+                </div>
+                <a class="source-pill" href="https://www.hindustantimes.com/india-news/delimitation-is-the-issue-sonia-gandhi-vs-pm-narendra-modi-on-womens-quota-bill-explained-101776075932210.html" target="_blank" rel="noopener" data-track="story1_hindustantimes">Open source ↗</a>
+              </div>
+            </div>
+            <div class="story-detail" id="detail1">Most outlets agree on the special sitting and the women’s quota push, but the angle changes sharply between constitutional process and party confrontation.</div>
+          </article>
+
+          <article class="story-card" id="story2" data-story="noida_workers_protest">
+            <div class="story-top">
+              <div class="story-meta">
+                <span>Uttar Pradesh</span>
+                <span>•</span>
+                <span>Apr 13</span>
+              </div>
+              <div class="score-chip">Transparency: mixed</div>
+            </div>
+            <button class="headline-btn" data-target="detail2" data-ui-label="headline_noida_workers">Noida factory workers’ protest turns violent and disrupts movement</button>
+            <div class="signal-row">
+              <span class="tag">core: wage protest + disruption</span>
+              <span class="tag">framing shifts: labour vs law-and-order</span>
+              <span class="tag">missing context: employer side</span>
+            </div>
+            <div class="source-list">
+              <div class="source-item">
+                <div class="source-left">
+                  <div class="source-name">Reuters</div>
+                  <div class="source-framing">Breaking-news escalation framing</div>
+                </div>
+                <a class="source-pill" href="https://www.reuters.com/business/world-at-work/police-fire-tear-gas-workers-protest-indias-noida-turns-violent-2026-04-13/" target="_blank" rel="noopener" data-track="story2_reuters">Open source ↗</a>
+              </div>
+              <div class="source-item">
+                <div class="source-left">
+                  <div class="source-name">Hindustan Times</div>
+                  <div class="source-framing">Ground-impact framing</div>
+                </div>
+                <a class="source-pill" href="https://www.hindustantimes.com/india-news/wagehike-demand-roads-blocked-all-about-the-noida-factory-workers-protest-top-points-101776074765011.html" target="_blank" rel="noopener" data-track="story2_hindustantimes">Open source ↗</a>
+              </div>
+              <div class="source-item">
+                <div class="source-left">
+                  <div class="source-name">Indian Express</div>
+                  <div class="source-framing">Explainer framing</div>
+                </div>
+                <a class="source-pill" href="https://indianexpress.com/article/explained/noida-workers-protest-why-anger-has-been-simmering-in-industrial-belts-in-many-cities-10634148/" target="_blank" rel="noopener" data-track="story2_indianexpress">Open source ↗</a>
+              </div>
+            </div>
+            <div class="story-detail" id="detail2">All sources report disruption and worker demands, but they differ in how much weight they give to worker grievances versus policing and commuter impact.</div>
+          </article>
+
+          <article class="story-card" id="story3" data-story="monsoon_forecast">
+            <div class="story-top">
+              <div class="story-meta">
+                <span>Economy</span>
+                <span>•</span>
+                <span>Apr 13</span>
+              </div>
+              <div class="score-chip">Transparency: high</div>
+            </div>
+            <button class="headline-btn" data-target="detail3" data-ui-label="headline_monsoon">IMD forecasts below-normal monsoon at 92% of long-period average</button>
+            <div class="signal-row">
+              <span class="tag">core: weaker monsoon forecast</span>
+              <span class="tag">framing shifts: climate vs farm risk</span>
+              <span class="tag">missing context: regional spread</span>
+            </div>
+            <div class="source-list">
+              <div class="source-item">
+                <div class="source-left">
+                  <div class="source-name">The Hindu</div>
+                  <div class="source-framing">Official forecast framing</div>
+                </div>
+                <a class="source-pill" href="https://www.thehindu.com/news/national/imd-forecasts-below-average-monsoon-rains-for-2026-amid-el-nino-concerns/article70857326.ece" target="_blank" rel="noopener" data-track="story3_thehindu">Open source ↗</a>
+              </div>
+              <div class="source-item">
+                <div class="source-left">
+                  <div class="source-name">Indian Express</div>
+                  <div class="source-framing">Weather-system and forecast-history framing</div>
+                </div>
+                <a class="source-pill" href="https://indianexpress.com/article/india/imd-says-rainfall-in-india-likely-to-be-92-of-long-period-average-10634041/" target="_blank" rel="noopener" data-track="story3_indianexpress">Open source ↗</a>
+              </div>
+              <div class="source-item">
+                <div class="source-left">
+                  <div class="source-name">Hindustan Times</div>
+                  <div class="source-framing">El Niño and rural-economy framing</div>
+                </div>
+                <a class="source-pill" href="https://www.hindustantimes.com/india-news/as-el-nino-shadow-looms-imd-forecasts-below-normal-monsoon-at-92-lpa-101776085690183.html" target="_blank" rel="noopener" data-track="story3_hindustantimes">Open source ↗</a>
+              </div>
+            </div>
+            <div class="story-detail" id="detail3">The number is similar across reports, but coverage differs in whether it emphasizes forecasting science, crop exposure, or broader economic risk.</div>
+          </article>
+
+          <article class="story-card" id="story4" data-story="march_inflation">
+            <div class="story-top">
+              <div class="story-meta">
+                <span>Business</span>
+                <span>•</span>
+                <span>Apr 13</span>
+              </div>
+              <div class="score-chip">Transparency: medium-high</div>
+            </div>
+            <button class="headline-btn" data-target="detail4" data-ui-label="headline_inflation">March retail inflation edges up to 3.4%</button>
+            <div class="signal-row">
+              <span class="tag">core: CPI at 3.4%</span>
+              <span class="tag">framing shifts: food vs fuel vs geopolitics</span>
+              <span class="tag">missing context: household impact</span>
+            </div>
+            <div class="source-list">
+              <div class="source-item">
+                <div class="source-left">
+                  <div class="source-name">The Hindu</div>
+                  <div class="source-framing">Data-first economic framing</div>
+                </div>
+                <a class="source-pill" href="https://www.thehindu.com/business/Economy/retail-inflation-inches-up-to-34-in-march/article70857475.ece" target="_blank" rel="noopener" data-track="story4_thehindu">Open source ↗</a>
+              </div>
+              <div class="source-item">
+                <div class="source-left">
+                  <div class="source-name">Indian Express</div>
+                  <div class="source-framing">West Asia impact framing</div>
+                </div>
+                <a class="source-pill" href="https://indianexpress.com/article/business/consumer-prices-rose-3-4-in-march-early-signs-of-west-asia-wars-impact-10634163/" target="_blank" rel="noopener" data-track="story4_indianexpress">Open source ↗</a>
+              </div>
+              <div class="source-item">
+                <div class="source-left">
+                  <div class="source-name">Mint</div>
+                  <div class="source-framing">Food and fuel pressure framing</div>
+                </div>
+                <a class="source-pill" href="https://www.livemint.com/economy/cpi-inflation-march-india-retail-inflation-food-prices-gdp-growth-west-asia-war-11776058841941.html" target="_blank" rel="noopener" data-track="story4_mint">Open source ↗</a>
+              </div>
+            </div>
+            <div class="story-detail" id="detail4">The headline number is shared across outlets, but the explanation differs: some stress food and fuel, while others highlight spillovers from West Asia tensions.</div>
+          </article>
+        </div>
+
+        <div class="bottom-grid">
+          <section class="interest-panel" id="interest">
+            <div class="section-kicker">Interest test</div>
+            <h3>Would you use this?</h3>
+            <div class="interest-row">
+              <button class="interest-btn" data-interest="daily_compare" data-ui-label="interest_daily_compare">
+                <strong>I would compare daily</strong>
+                <span>Use this instead of reading one outlet.</span>
+              </button>
+              <button class="interest-btn" data-interest="local_news" data-ui-label="interest_local_news">
+                <strong>I want local news</strong>
+                <span>District and city stories like this.</span>
+              </button>
+              <button class="interest-btn" data-interest="bias_signals" data-ui-label="interest_bias_signals">
+                <strong>I want bias signals</strong>
+                <span>Show framing and missing context clearly.</span>
+              </button>
+              <button class="interest-btn" data-interest="transparency" data-ui-label="interest_transparency">
+                <strong>I care about transparency</strong>
+                <span>Show source differences before opinion.</span>
+              </button>
+            </div>
+          </section>
+
+          <aside class="waitlist-panel" id="waitlist">
+            <div class="section-kicker">Early access</div>
+            <h3>Want the first version?</h3>
+            <p class="waitlist-copy">Join only if you would actually want to use this when it becomes real.</p>
+            <button class="waitlist-btn" id="waitlistRevealBtn" data-ui-label="panel_get_early_access">Get early access</button>
+            <form class="waitlist-form" id="waitlistForm">
+              <input type="email" id="email" placeholder="Enter your email" required />
+              <button type="submit" class="submit-btn" data-ui-label="join_waitlist">Join waitlist</button>
+            </form>
+            <div class="thank-you" id="thankYou">Thanks — your interest was recorded.</div>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer" id="footer">
+    <div class="container">
+      <p>rit-media • source comparison • transparency signals • reader judgment</p>
+    </div>
+  </footer>
+
+  <script>
+    const headlineButtons = document.querySelectorAll('.headline-btn');
+    const detailPanels = document.querySelectorAll('.story-detail');
+    const interestButtons = document.querySelectorAll('.interest-btn');
+    const trackedLinks = document.querySelectorAll('[data-track]');
+    const topWaitlistBtn = document.getElementById('topWaitlistBtn');
+    const waitlistRevealBtn = document.getElementById('waitlistRevealBtn');
+    const waitlistForm = document.getElementById('waitlistForm');
+    const thankYou = document.getElementById('thankYou');
+
+    function track(eventName, params = {}) {
+      if (typeof gtag === 'function') {
+        gtag('event', eventName, params);
+      }
+    }
+
+    function cleanText(text) {
+      return (text || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    }
+
+    function revealWaitlist(origin) {
+      waitlistForm.classList.add('open');
+      document.getElementById('waitlist').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      track('waitlist_reveal', { origin });
+    }
+
+    headlineButtons.forEach((button, index) => {
+      button.addEventListener('click', function () {
+        const targetId = this.getAttribute('data-target');
+        const panel = document.getElementById(targetId);
+        const isOpen = panel.classList.contains('open');
+
+        detailPanels.forEach(item => item.classList.remove('open'));
+        if (!isOpen) {
+          panel.classList.add('open');
+          track('story_open', {
+            story: this.closest('.story-card')?.getAttribute('data-story') || `story_${index + 1}`
+          });
+        }
+      });
+    });
+
+    trackedLinks.forEach(link => {
+      link.addEventListener('click', function () {
+        track('source_open', {
+          source: this.getAttribute('data-track'),
+          story: this.closest('.story-card')?.getAttribute('data-story') || ''
+        });
+      });
+    });
+
+    interestButtons.forEach(button => {
+      button.addEventListener('click', function () {
+        const interest = this.getAttribute('data-interest');
+        track('interest_click', { interest });
+        this.style.borderColor = 'rgba(17,24,39,0.22)';
+        this.style.transform = 'translateY(-1px)';
+      });
+    });
+
+    topWaitlistBtn.addEventListener('click', function () {
+      revealWaitlist('topbar');
+    });
+
+    waitlistRevealBtn.addEventListener('click', function () {
+      revealWaitlist('panel');
+    });
+
+    waitlistForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      track('waitlist_submit');
+      waitlistForm.style.display = 'none';
+      thankYou.style.display = 'block';
+    });
+
+    document.addEventListener('click', function (e) {
+      const el = e.target;
+      const clickableAncestor = el.closest('a, button, .story-card, .tag, .score-chip, .brand, .source-item, .story-meta, .interest-panel, .waitlist-panel');
+      const trackedEl = clickableAncestor || el;
+      const storyCard = trackedEl.closest('.story-card');
+      const section = trackedEl.closest('section, header, footer, article, aside');
+      const href = trackedEl.getAttribute && trackedEl.getAttribute('href') ? trackedEl.getAttribute('href') : '';
+
+      track('ui_click', {
+        tag: (trackedEl.tagName || '').toLowerCase(),
+        label: trackedEl.getAttribute?.('data-ui-label') || trackedEl.getAttribute?.('data-track') || cleanText(trackedEl.textContent),
+        id: trackedEl.id || '',
+        class_name: typeof trackedEl.className === 'string' ? trackedEl.className.split(' ').slice(0, 3).join('_') : '',
+        story: storyCard ? storyCard.getAttribute('data-story') : '',
+        section: section ? (section.id || section.className.toString().split(' ')[0]) : '',
+        href_domain: href ? (() => { try { return new URL(href, window.location.href).hostname; } catch (_) { return ''; } })() : ''
+      });
+    }, true);
+  </script>
+</body>
+</html>
