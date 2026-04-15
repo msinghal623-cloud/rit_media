@@ -1,0 +1,122 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>rit-media - compare India's top stories across sources</title>
+  <meta name="description" content="India's top stories grouped across multiple sources with live fetching, story clustering, summaries, and source-by-source comparison." />
+  <link rel="stylesheet" href="assets/css/main.css" />
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-3QKLH3B8N1"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-3QKLH3B8N1');
+  </script>
+</head>
+<body>
+  <header class="topbar" id="topbar">
+    <div class="container topbar-inner">
+      <div class="brand" data-ui-label="brand">
+        <div class="brand-mark">RIT</div>
+        <div class="brand-copy">
+          <h1>rit-media</h1>
+          <p>same story. many sources. visible framing</p>
+        </div>
+      </div>
+      <button class="top-cta" id="topWaitlistBtn" data-ui-label="top_get_early_access">Get early access</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="hero">
+      <div class="container">
+        <div class="hero-head">
+          <div>
+            <div class="eyebrow">India demo . live grouped headlines</div>
+            <h2>One story. Many sources. You decide.</h2>
+            <p class="hero-note">The homepage now fetches article feeds, groups similar coverage, and turns them into source-comparison story cards.</p>
+          </div>
+        </div>
+
+        <section class="story-section" aria-labelledby="storiesHeading">
+          <div class="story-toolbar">
+            <div>
+              <div class="section-kicker">Live feed</div>
+              <h3 id="storiesHeading" class="story-section-title">Grouped stories from Indian news sources</h3>
+            </div>
+            <div class="story-actions">
+              <p class="feed-status" id="feedStatus">Loading stories from configured sources...</p>
+              <div class="scroll-controls" aria-label="Story navigation">
+                <button class="scroll-btn" id="storyScrollPrev" type="button" data-ui-label="stories_scroll_prev">Scroll left</button>
+                <button class="scroll-btn" id="storyScrollNext" type="button" data-ui-label="stories_scroll_next">Scroll right</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="story-rail-shell">
+            <div class="story-rail loading" id="storyRail" aria-live="polite">
+              <article class="story-card story-card-placeholder">
+                <div class="story-top">
+                  <div class="story-meta">
+                    <span>Loading</span>
+                    <span>.</span>
+                    <span>Live feeds</span>
+                  </div>
+                  <div class="score-chip">Preparing grouping</div>
+                </div>
+                <div class="headline-static">Fetching articles, ranking overlap, and building source comparisons...</div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <div class="bottom-grid">
+          <section class="interest-panel" id="interest">
+            <div class="section-kicker">Interest test</div>
+            <h3>Would you use this?</h3>
+            <div class="interest-row">
+              <button class="interest-btn" data-interest="daily_compare" data-ui-label="interest_daily_compare">
+                <strong>I would compare daily</strong>
+                <span>Use this instead of reading one outlet.</span>
+              </button>
+              <button class="interest-btn" data-interest="local_news" data-ui-label="interest_local_news">
+                <strong>I want local news</strong>
+                <span>District and city stories like this.</span>
+              </button>
+              <button class="interest-btn" data-interest="bias_signals" data-ui-label="interest_bias_signals">
+                <strong>I want bias signals</strong>
+                <span>Show framing and missing context clearly.</span>
+              </button>
+              <button class="interest-btn" data-interest="transparency" data-ui-label="interest_transparency">
+                <strong>I care about transparency</strong>
+                <span>Show source differences before opinion.</span>
+              </button>
+            </div>
+          </section>
+
+          <aside class="waitlist-panel" id="waitlist">
+            <div class="section-kicker">Early access</div>
+            <h3>Want the first version?</h3>
+            <p class="waitlist-copy">Join only if you would actually want to use this when it becomes real.</p>
+            <button class="waitlist-btn" id="waitlistRevealBtn" data-ui-label="panel_get_early_access">Get early access</button>
+            <form class="waitlist-form" id="waitlistForm">
+              <input type="email" id="email" placeholder="Enter your email" required />
+              <button type="submit" class="submit-btn" data-ui-label="join_waitlist">Join waitlist</button>
+            </form>
+            <div class="thank-you" id="thankYou">Thanks - your interest was recorded.</div>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer" id="footer">
+    <div class="container">
+      <p>rit-media . source comparison . transparency signals . reader judgment</p>
+    </div>
+  </footer>
+
+  <script src="assets/js/homepage.js"></script>
+</body>
+</html>
