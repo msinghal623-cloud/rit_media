@@ -6,6 +6,7 @@
   const interestButtons = document.querySelectorAll(".interest-btn");
   const storyRail = document.getElementById("storyRail");
   const feedStatus = document.getElementById("feedStatus");
+  const storyImageCache = new Map();
 
   function track(eventName, params) {
     if (typeof gtag === "function") {
@@ -59,7 +60,8 @@
     if (story.image) {
       return {
         url: story.image,
-        kind: "article"
+        kind: "article",
+        probeUrl: ""
       };
     }
 
@@ -67,52 +69,21 @@
     if (sourceWithImage?.image) {
       return {
         url: sourceWithImage.image,
-        kind: "article"
+        kind: "article",
+        probeUrl: ""
       };
     }
 
     const sourceWithLink = (story.sources || []).find((source) => source.link);
-    const sourceDomain = domainFromLink(sourceWithLink?.link || "");
-    if (sourceDomain) {
-      return {
-        url: "https://www.google.com/s2/favicons?domain=" + encodeURIComponent(sourceDomain) + "&sz=256",
-        kind: "source"
-      };
-    }
-
     return {
       url: "",
-      kind: "none"
+      kind: "missing",
+      probeUrl: sourceWithLink?.link || ""
     };
   }
 
   function sourceGridClass(count) {
     return count > 3 ? "is-expanded" : "is-compact";
-  }
-
-  function buildSourceMosaic(story) {
-    const sourceTiles = (story.sources || [])
-      .slice(0, 4)
-      .map((source) => {
-        const domain = domainFromLink(source.link || "");
-        if (!domain) {
-          return "";
-        }
-
-        const faviconUrl = "https://www.google.com/s2/favicons?domain=" + encodeURIComponent(domain) + "&sz=256";
-        return '<div class="story-source-tile">' +
-          '<div class="story-source-icon" style="background-image: url(&quot;' + escapeAttribute(faviconUrl) + '&quot;);"></div>' +
-          '<span>' + escapeHtml(source.sourceName) + "</span>" +
-        "</div>";
-      })
-      .filter(Boolean)
-      .join("");
-
-    if (!sourceTiles) {
-      return "";
-    }
-
-    return '<div class="story-source-mosaic">' + sourceTiles + "</div>";
   }
 
   function storyCardTemplate(story) {
@@ -135,14 +106,13 @@
     const heroMedia = heroImage.url
       ? '<div class="story-hero-media" style="background-image: url(&quot;' + escapeAttribute(heroImage.url) + '&quot;);"></div>'
       : "";
-    const heroClass = heroImage.kind === "source" ? " story-hero-source-fallback" : "";
-    const sourceMosaic = heroImage.kind === "source" ? buildSourceMosaic(story) : "";
+    const heroAttributes = ' data-image-state="' + escapeHtml(heroImage.kind) + '"' +
+      ' data-image-probe="' + escapeAttribute(heroImage.probeUrl || "") + '"';
 
     return '<article class="story-card" data-story="' + escapeHtml(story.id) + '">' +
       '<div class="story-shell">' +
-        '<div class="story-hero' + heroClass + '">' +
+        '<div class="story-hero"' + heroAttributes + '>' +
           heroMedia +
-          sourceMosaic +
           '<div class="story-top">' +
             '<div class="story-meta">' +
               "<span>" + escapeHtml(story.theme || "Top story") + "</span>" +
@@ -190,6 +160,67 @@
     }
 
     storyRail.innerHTML = stories.map(storyCardTemplate).join("");
+    hydrateStoryImages();
+  }
+
+  function applyStoryImage(hero, imageUrl) {
+    if (!hero || !imageUrl) {
+      return;
+    }
+
+    let mediaLayer = hero.querySelector(".story-hero-media");
+    if (!mediaLayer) {
+      mediaLayer = document.createElement("div");
+      mediaLayer.className = "story-hero-media";
+      hero.insertBefore(mediaLayer, hero.firstChild);
+    }
+
+    mediaLayer.style.backgroundImage = 'url("' + imageUrl.replace(/"/g, "%22") + '")';
+    hero.setAttribute("data-image-state", "article");
+  }
+
+  async function resolveStoryImage(probeUrl) {
+    if (!probeUrl) {
+      return "";
+    }
+
+    if (storyImageCache.has(probeUrl)) {
+      return storyImageCache.get(probeUrl);
+    }
+
+    const request = fetch("/api/story-image?url=" + encodeURIComponent(probeUrl), {
+      headers: {
+        accept: "application/json"
+      }
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Image request failed with status " + response.status);
+        }
+
+        return response.json();
+      })
+      .then((payload) => payload.image || "")
+      .catch(() => "");
+
+    storyImageCache.set(probeUrl, request);
+    return request;
+  }
+
+  async function hydrateStoryImages() {
+    const heroes = Array.from(document.querySelectorAll('.story-hero[data-image-state="missing"]'));
+
+    await Promise.all(heroes.map(async (hero) => {
+      const probeUrl = hero.getAttribute("data-image-probe") || "";
+      const imageUrl = await resolveStoryImage(probeUrl);
+
+      if (imageUrl) {
+        applyStoryImage(hero, imageUrl);
+        return;
+      }
+
+      hero.setAttribute("data-image-state", "unresolved");
+    }));
   }
 
   async function loadStories() {

@@ -11,3 +11,8 @@
   from = "/api/refresh-news"
   to = "/.netlify/functions/refresh-news-background"
   status = 200
+
+[[redirects]]
+  from = "/api/story-image"
+  to = "/.netlify/functions/story-image"
+  status = 200
