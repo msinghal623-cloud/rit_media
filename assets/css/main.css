@@ -164,13 +164,6 @@ button {
   max-width: 860px;
 }
 
-.hero-note {
-  margin-top: 10px;
-  font-size: 15px;
-  color: var(--muted);
-  max-width: 700px;
-}
-
 .story-section {
   display: grid;
   gap: 16px;
@@ -259,6 +252,23 @@ button {
   flex-direction: column;
   justify-content: space-between;
   padding: 16px;
+}
+
+.story-hero-media {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transform: scale(1.02);
+}
+
+.story-hero-source-fallback .story-hero-media {
+  background-size: 132px;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.3;
+  filter: grayscale(0.1);
 }
 
 .story-hero::after {
@@ -356,9 +366,9 @@ button {
   background: transparent;
   padding: 0;
   color: #fff;
-  font-size: clamp(1.75rem, 5vw, 2.4rem);
+  font-size: clamp(1.4rem, 4vw, 1.95rem);
   font-weight: 850;
-  line-height: 1;
+  line-height: 1.04;
   letter-spacing: -0.04em;
   text-shadow: 0 10px 32px rgba(16, 24, 40, 0.34);
 }
@@ -612,7 +622,7 @@ button {
   }
 
   .headline-btn {
-    font-size: clamp(1.5rem, 8vw, 2rem);
+    font-size: clamp(1.28rem, 6vw, 1.72rem);
   }
 
   .source-list.is-expanded {

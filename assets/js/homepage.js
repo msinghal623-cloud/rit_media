@@ -47,13 +47,43 @@
     }).format(new Date(value));
   }
 
+  function domainFromLink(link) {
+    try {
+      return new URL(link, window.location.href).hostname;
+    } catch (_) {
+      return "";
+    }
+  }
+
   function toStoryImage(story) {
     if (story.image) {
-      return story.image;
+      return {
+        url: story.image,
+        kind: "article"
+      };
     }
 
-    const sourceImage = (story.sources || []).find((source) => source.image)?.image;
-    return sourceImage || "";
+    const sourceWithImage = (story.sources || []).find((source) => source.image);
+    if (sourceWithImage?.image) {
+      return {
+        url: sourceWithImage.image,
+        kind: "article"
+      };
+    }
+
+    const sourceWithLink = (story.sources || []).find((source) => source.link);
+    const sourceDomain = domainFromLink(sourceWithLink?.link || "");
+    if (sourceDomain) {
+      return {
+        url: "https://www.google.com/s2/favicons?domain=" + encodeURIComponent(sourceDomain) + "&sz=256",
+        kind: "source"
+      };
+    }
+
+    return {
+      url: "",
+      kind: "none"
+    };
   }
 
   function sourceGridClass(count) {
@@ -77,13 +107,15 @@
       "</div>";
     }).join("");
     const heroImage = toStoryImage(story);
-    const heroStyle = heroImage
-      ? ' style="background-image: var(--overlay), linear-gradient(135deg, rgba(17, 24, 39, 0.2), rgba(71, 85, 105, 0.16)), url(&quot;' + escapeAttribute(heroImage) + '&quot;);"'
+    const heroMedia = heroImage.url
+      ? '<div class="story-hero-media" style="background-image: url(&quot;' + escapeAttribute(heroImage.url) + '&quot;);"></div>'
       : "";
+    const heroClass = heroImage.kind === "source" ? " story-hero-source-fallback" : "";
 
     return '<article class="story-card" data-story="' + escapeHtml(story.id) + '">' +
       '<div class="story-shell">' +
-        '<div class="story-hero"' + heroStyle + '>' +
+        '<div class="story-hero' + heroClass + '">' +
+          heroMedia +
           '<div class="story-top">' +
             '<div class="story-meta">' +
               "<span>" + escapeHtml(story.theme || "Top story") + "</span>" +
