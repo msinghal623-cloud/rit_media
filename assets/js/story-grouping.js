@@ -87,11 +87,57 @@
   }
 
   function buildSummary(group) {
-    const lead = group.articles[0];
-    const sources = [...new Set(group.articles.map((article) => article.sourceName))];
-    const intro = lead.summary || lead.title;
-    const compactIntro = intro.replace(/\.$/, "");
-    return sources.length + " sources are covering " + compactIntro + ". Coverage is being compared from " + sources.slice(0, 3).join(", ") + (sources.length > 3 ? ", and others." : ".");
+    function compactText(value) {
+      return String(value || "")
+        .replace(/\s+/g, " ")
+        .replace(/\.\.\.+/g, ".")
+        .trim();
+    }
+
+    function toSentence(value) {
+      const cleaned = compactText(value)
+        .replace(/^[\-\s:;,.]+/, "")
+        .replace(/\s+[|:-]\s+.*$/, "")
+        .replace(/(Read more|Also read|Watch live|Live updates).*$/i, "")
+        .trim();
+
+      if (!cleaned) {
+        return "";
+      }
+
+      const firstSentence = cleaned.match(/[^.!?]+[.!?]?/);
+      const sentence = (firstSentence?.[0] || cleaned).trim();
+      if (!sentence) {
+        return "";
+      }
+
+      return /[.!?]$/.test(sentence) ? sentence : sentence + ".";
+    }
+
+    function normalizeForCompare(value) {
+      return compactText(value)
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    const candidateSentences = group.articles
+      .map((article) => toSentence(article.summary || article.title))
+      .filter(Boolean);
+
+    const leadSentence = candidateSentences[0] || toSentence(group.articles[0]?.title || "Grouped story");
+    const leadNormalized = normalizeForCompare(leadSentence);
+    const secondarySentence = candidateSentences.find((sentence) => {
+      const normalized = normalizeForCompare(sentence);
+      return normalized && normalized !== leadNormalized && normalized.length > 36;
+    });
+
+    if (!secondarySentence) {
+      return leadSentence;
+    }
+
+    return leadSentence + " Other reports focus on " + secondarySentence.charAt(0).toLowerCase() + secondarySentence.slice(1);
   }
 
   function buildSignals(group) {
