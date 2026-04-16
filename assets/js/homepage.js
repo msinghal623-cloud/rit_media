@@ -90,6 +90,31 @@
     return count > 3 ? "is-expanded" : "is-compact";
   }
 
+  function buildSourceMosaic(story) {
+    const sourceTiles = (story.sources || [])
+      .slice(0, 4)
+      .map((source) => {
+        const domain = domainFromLink(source.link || "");
+        if (!domain) {
+          return "";
+        }
+
+        const faviconUrl = "https://www.google.com/s2/favicons?domain=" + encodeURIComponent(domain) + "&sz=256";
+        return '<div class="story-source-tile">' +
+          '<div class="story-source-icon" style="background-image: url(&quot;' + escapeAttribute(faviconUrl) + '&quot;);"></div>' +
+          '<span>' + escapeHtml(source.sourceName) + "</span>" +
+        "</div>";
+      })
+      .filter(Boolean)
+      .join("");
+
+    if (!sourceTiles) {
+      return "";
+    }
+
+    return '<div class="story-source-mosaic">' + sourceTiles + "</div>";
+  }
+
   function storyCardTemplate(story) {
     const detailId = story.id + "-detail";
     const visibleSources = (story.sources || []).slice(0, story.sourceCount > 3 ? 6 : 3);
@@ -111,11 +136,13 @@
       ? '<div class="story-hero-media" style="background-image: url(&quot;' + escapeAttribute(heroImage.url) + '&quot;);"></div>'
       : "";
     const heroClass = heroImage.kind === "source" ? " story-hero-source-fallback" : "";
+    const sourceMosaic = heroImage.kind === "source" ? buildSourceMosaic(story) : "";
 
     return '<article class="story-card" data-story="' + escapeHtml(story.id) + '">' +
       '<div class="story-shell">' +
         '<div class="story-hero' + heroClass + '">' +
           heroMedia +
+          sourceMosaic +
           '<div class="story-top">' +
             '<div class="story-meta">' +
               "<span>" + escapeHtml(story.theme || "Top story") + "</span>" +
