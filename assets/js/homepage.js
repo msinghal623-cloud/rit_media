@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const topWaitlistBtn = document.getElementById("topWaitlistBtn");
   const waitlistRevealBtn = document.getElementById("waitlistRevealBtn");
   const waitlistForm = document.getElementById("waitlistForm");
@@ -6,8 +6,6 @@
   const interestButtons = document.querySelectorAll(".interest-btn");
   const storyRail = document.getElementById("storyRail");
   const feedStatus = document.getElementById("feedStatus");
-  const storyScrollPrev = document.getElementById("storyScrollPrev");
-  const storyScrollNext = document.getElementById("storyScrollNext");
 
   function track(eventName, params) {
     if (typeof gtag === "function") {
@@ -28,6 +26,10 @@
       .replace(/'/g, "&#39;");
   }
 
+  function escapeAttribute(value) {
+    return escapeHtml(value).replace(/`/g, "&#96;");
+  }
+
   function revealWaitlist(origin) {
     waitlistForm.classList.add("is-open");
     document.getElementById("waitlist").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -45,13 +47,26 @@
     }).format(new Date(value));
   }
 
+  function toStoryImage(story) {
+    if (story.image) {
+      return story.image;
+    }
+
+    const sourceImage = (story.sources || []).find((source) => source.image)?.image;
+    return sourceImage || "";
+  }
+
+  function sourceGridClass(count) {
+    return count > 3 ? "is-expanded" : "is-compact";
+  }
+
   function storyCardTemplate(story) {
     const detailId = story.id + "-detail";
+    const visibleSources = (story.sources || []).slice(0, story.sourceCount > 3 ? 6 : 3);
     const signals = (story.signals || []).length
       ? story.signals.map((signal) => '<span class="tag">' + escapeHtml(signal) + "</span>").join("")
       : '<span class="tag">Grouped from overlapping headlines</span>';
-
-    const sources = (story.sources || []).map((source, index) => {
+    const sources = visibleSources.map((source, index) => {
       return '<div class="source-item">' +
         '<div class="source-left">' +
           '<div class="source-name">' + escapeHtml(source.sourceName) + "</div>" +
@@ -61,23 +76,39 @@
         '<a class="source-pill" href="' + escapeHtml(source.link) + '" target="_blank" rel="noopener" data-track="' + escapeHtml(story.id + "_" + source.sourceId + "_" + (index + 1)) + '">Open source</a>' +
       "</div>";
     }).join("");
+    const heroImage = toStoryImage(story);
+    const heroStyle = heroImage
+      ? ' style="background-image: var(--overlay), linear-gradient(135deg, rgba(17, 24, 39, 0.2), rgba(71, 85, 105, 0.16)), url(&quot;' + escapeAttribute(heroImage) + '&quot;);"'
+      : "";
 
     return '<article class="story-card" data-story="' + escapeHtml(story.id) + '">' +
-      '<div class="story-top">' +
-        '<div class="story-meta">' +
-          "<span>" + escapeHtml(story.theme || "Top story") + "</span>" +
-          "<span>.</span>" +
-          "<span>" + escapeHtml(formatDate(story.publishedAt)) + "</span>" +
-          "<span>.</span>" +
-          "<span>" + escapeHtml(String(story.sourceCount || 0)) + " sources</span>" +
+      '<div class="story-shell">' +
+        '<div class="story-hero"' + heroStyle + '>' +
+          '<div class="story-top">' +
+            '<div class="story-meta">' +
+              "<span>" + escapeHtml(story.theme || "Top story") + "</span>" +
+              "<span>.</span>" +
+              "<span>" + escapeHtml(formatDate(story.publishedAt)) + "</span>" +
+              "<span>.</span>" +
+              "<span>" + escapeHtml(String(story.sourceCount || 0)) + " sources</span>" +
+            "</div>" +
+            '<div class="score-chip">' + escapeHtml(story.transparency || "Transparency: limited") + "</div>" +
+          "</div>" +
+          '<div class="story-heading-wrap">' +
+            '<button class="headline-btn" data-target="' + escapeHtml(detailId) + '" data-ui-label="' + escapeHtml(story.id + "_headline") + '">' + escapeHtml(story.title) + "</button>" +
+            '<div class="story-heading-badges">' +
+              '<span class="story-badge">' + escapeHtml((story.sourceCount || visibleSources.length) > 3 ? "6-source view" : "3-source view") + "</span>" +
+              '<span class="story-badge">' + escapeHtml(story.theme || "Top story") + "</span>" +
+            "</div>" +
+          "</div>" +
         "</div>" +
-        '<div class="score-chip">' + escapeHtml(story.transparency || "Transparency: limited") + "</div>" +
+        '<div class="story-body">' +
+          '<p class="story-summary">' + escapeHtml(story.summary || "") + "</p>" +
+          '<div class="signal-row">' + signals + "</div>" +
+          '<div class="source-list ' + sourceGridClass(visibleSources.length) + '">' + sources + "</div>" +
+          '<div class="story-detail" id="' + escapeHtml(detailId) + '">This grouped story combines overlapping reporting from multiple publishers in the latest refresh snapshot.</div>' +
+        "</div>" +
       "</div>" +
-      '<button class="headline-btn" data-target="' + escapeHtml(detailId) + '" data-ui-label="' + escapeHtml(story.id + "_headline") + '">' + escapeHtml(story.title) + "</button>" +
-      '<p class="story-summary">' + escapeHtml(story.summary || "") + "</p>" +
-      '<div class="signal-row">' + signals + "</div>" +
-      '<div class="source-list">' + sources + "</div>" +
-      '<div class="story-detail" id="' + escapeHtml(detailId) + '">This grouped story combines overlapping reporting from multiple publishers in the latest refresh snapshot.</div>' +
       "</article>";
   }
 
@@ -86,11 +117,15 @@
 
     if (!stories.length) {
       storyRail.innerHTML = '<article class="story-card story-card-placeholder">' +
-        '<div class="story-top">' +
-          '<div class="story-meta"><span>No grouped stories yet</span><span>.</span><span>Awaiting refresh</span></div>' +
-          '<div class="score-chip">Feed not ready</div>' +
+        '<div class="story-shell">' +
+          '<div class="story-hero story-hero-placeholder">' +
+            '<div class="story-top">' +
+              '<div class="story-meta"><span>No grouped stories yet</span><span>.</span><span>Awaiting refresh</span></div>' +
+              '<div class="score-chip">Feed not ready</div>' +
+            "</div>" +
+            '<div class="headline-static">Deploy the site, run the refresh function once, and the hourly Netlify schedule will keep this homepage updated from the stored feed snapshot.</div>' +
+          "</div>" +
         "</div>" +
-        '<div class="headline-static">Deploy the site, run the refresh function once, and the hourly Netlify schedule will keep this homepage updated from the stored feed snapshot.</div>' +
         "</article>";
       return;
     }
@@ -150,14 +185,6 @@
     track("waitlist_submit");
   });
 
-  storyScrollPrev.addEventListener("click", function () {
-    storyRail.scrollBy({ left: -420, behavior: "smooth" });
-  });
-
-  storyScrollNext.addEventListener("click", function () {
-    storyRail.scrollBy({ left: 420, behavior: "smooth" });
-  });
-
   document.addEventListener("click", function (event) {
     const headlineButton = event.target.closest(".headline-btn");
     if (headlineButton) {
@@ -170,7 +197,7 @@
     }
 
     const el = event.target;
-    const clickableAncestor = el.closest("a, button, .story-card, .tag, .score-chip, .brand, .source-item, .story-meta, .interest-panel, .waitlist-panel");
+    const clickableAncestor = el.closest("a, button, .story-card, .tag, .score-chip, .story-badge, .brand, .source-item, .story-meta, .interest-panel, .waitlist-panel");
     const trackedEl = clickableAncestor || el;
     const storyCard = trackedEl.closest(".story-card");
     const section = trackedEl.closest("section, header, footer, article, aside");
