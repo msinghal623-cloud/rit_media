@@ -1,11 +1,7 @@
-import { getStore } from "@netlify/blobs";
-import { getActiveNewsSources } from "./news-sources.mjs";
-import { fetchSourceArticles } from "./rss-ingest.mjs";
-import { groupAndRankArticles } from "./story-grouping.mjs";
-
-const STORE_NAME = "rit-media-news";
-const CURRENT_KEY = "feed/current.json";
-const STATUS_KEY = "feed/status.json";
+import { saveSnapshot, readLatestSnapshot } from "./db.js";
+import { getActiveNewsSources } from "./news-sources.js";
+import { fetchSourceArticles } from "./rss-ingest.js";
+import { groupAndRankArticles } from "./story-grouping.js";
 
 function buildPayload({ sources, articles, stories, diagnostics }) {
   const successfulSources = diagnostics.filter((item) => item.ok).length;
@@ -57,21 +53,11 @@ export async function refreshNewsSnapshot() {
 
   const stories = groupAndRankArticles(articles).slice(0, 12);
   const payload = buildPayload({ sources, articles, stories, diagnostics });
-  const store = getStore(STORE_NAME);
 
-  await store.setJSON(CURRENT_KEY, payload);
-  await store.setJSON(STATUS_KEY, {
-    updatedAt: payload.generatedAt,
-    articleCount: payload.articleCount,
-    groupedStoryCount: payload.groupedStoryCount,
-    successfulSources: payload.successfulSources,
-    failedSources: payload.failedSources
-  });
-
+  await saveSnapshot(payload);
   return payload;
 }
 
 export async function readCurrentSnapshot() {
-  const store = getStore(STORE_NAME);
-  return store.get(CURRENT_KEY, { type: "json" });
+  return readLatestSnapshot();
 }

@@ -7,10 +7,7 @@ const parser = new XMLParser({
 });
 
 function asArray(value) {
-  if (!value) {
-    return [];
-  }
-
+  if (!value) return [];
   return Array.isArray(value) ? value : [value];
 }
 
@@ -72,7 +69,7 @@ function normalizeRssItem(item, source, feedUrl) {
 export async function fetchFeedArticles(source, feedUrl) {
   const response = await fetch(feedUrl, {
     headers: {
-      "user-agent": "rit-media/1.0 (+https://rit-media.netlify.app)"
+      "user-agent": "rit-media/2.0 (+https://rit-media.netlify.app)"
     }
   });
 
@@ -84,17 +81,12 @@ export async function fetchFeedArticles(source, feedUrl) {
   const parsed = parser.parse(xml);
   const items = asArray(parsed?.rss?.channel?.item || parsed?.feed?.entry);
 
-  return items
-    .map((item) => normalizeRssItem(item, source, feedUrl))
-    .filter(Boolean);
+  return items.map((item) => normalizeRssItem(item, source, feedUrl)).filter(Boolean);
 }
 
 export async function fetchSourceArticles(source, options = {}) {
   const limitPerFeed = options.limitPerFeed ?? 10;
-  const results = await Promise.allSettled(
-    source.feeds.map((feedUrl) => fetchFeedArticles(source, feedUrl))
-  );
-
+  const results = await Promise.allSettled(source.feeds.map((feedUrl) => fetchFeedArticles(source, feedUrl)));
   const articles = [];
   const diagnostics = [];
 
@@ -102,11 +94,7 @@ export async function fetchSourceArticles(source, options = {}) {
     const feedUrl = source.feeds[index];
     if (result.status === "fulfilled") {
       articles.push(...result.value.slice(0, limitPerFeed));
-      diagnostics.push({
-        feedUrl,
-        ok: true,
-        articleCount: result.value.length
-      });
+      diagnostics.push({ feedUrl, ok: true, articleCount: result.value.length });
       return;
     }
 
@@ -118,9 +106,5 @@ export async function fetchSourceArticles(source, options = {}) {
     });
   });
 
-  return {
-    source,
-    articles,
-    diagnostics
-  };
+  return { source, articles, diagnostics };
 }

@@ -1,33 +1,7 @@
 const STOPWORDS = new Set([
-  "a",
-  "an",
-  "and",
-  "are",
-  "as",
-  "at",
-  "be",
-  "by",
-  "for",
-  "from",
-  "has",
-  "have",
-  "in",
-  "into",
-  "is",
-  "it",
-  "of",
-  "on",
-  "or",
-  "that",
-  "the",
-  "their",
-  "this",
-  "to",
-  "was",
-  "will",
-  "with",
-  "india",
-  "indian"
+  "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has",
+  "have", "in", "into", "is", "it", "of", "on", "or", "that", "the",
+  "their", "this", "to", "was", "will", "with", "india", "indian"
 ]);
 
 function toTimestamp(value) {
@@ -36,17 +10,11 @@ function toTimestamp(value) {
 }
 
 function normalizeText(value = "") {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function titleTokens(value) {
-  return normalizeText(value)
-    .split(" ")
-    .filter((token) => token.length > 2 && !STOPWORDS.has(token));
+  return normalizeText(value).split(" ").filter((token) => token.length > 2 && !STOPWORDS.has(token));
 }
 
 function jaccard(tokensA, tokensB) {
@@ -78,73 +46,48 @@ function dedupeByLink(articles) {
 
 function classifyFraming(title) {
   const text = normalizeText(title);
-  if (text.includes("live") || text.includes("updates")) {
-    return "Live update framing";
-  }
-  if (text.includes("explained") || text.includes("why") || text.includes("how")) {
-    return "Explainer framing";
-  }
-  if (text.includes("stocks") || text.includes("market") || text.includes("economy") || text.includes("inflation")) {
-    return "Economic framing";
-  }
-  if (text.includes("election") || text.includes("government") || text.includes("parliament") || text.includes("policy")) {
-    return "Political framing";
-  }
+  if (text.includes("live") || text.includes("updates")) return "Live update framing";
+  if (text.includes("explained") || text.includes("why") || text.includes("how")) return "Explainer framing";
+  if (text.includes("stocks") || text.includes("market") || text.includes("economy") || text.includes("inflation")) return "Economic framing";
+  if (text.includes("election") || text.includes("government") || text.includes("parliament") || text.includes("policy")) return "Political framing";
   return "General report framing";
 }
 
 function transparencyLabel(sourceCount) {
-  if (sourceCount >= 5) {
-    return "Transparency: high";
-  }
-  if (sourceCount >= 3) {
-    return "Transparency: medium-high";
-  }
-  if (sourceCount >= 2) {
-    return "Transparency: medium";
-  }
+  if (sourceCount >= 5) return "Transparency: high";
+  if (sourceCount >= 3) return "Transparency: medium-high";
+  if (sourceCount >= 2) return "Transparency: medium";
   return "Transparency: limited";
 }
 
-function pickTheme(group) {
+function titleCase(value) {
+  return value.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function pickTheme(articles) {
   const counts = new Map();
-  group.articles.forEach((article) => {
+  articles.forEach((article) => {
     article.categories.forEach((category) => {
       const key = normalizeText(category);
-      if (!key) {
-        return;
-      }
-      counts.set(key, (counts.get(key) || 0) + 1);
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
     });
   });
 
   const winner = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  if (!winner) {
-    return "Top story";
-  }
-
-  return winner.replace(/\b\w/g, (char) => char.toUpperCase());
+  return winner ? titleCase(winner) : "Top story";
 }
 
-function buildSignals(group) {
+function buildSignals(articles) {
   const counts = new Map();
-  group.articles.forEach((article) => {
-    titleTokens(article.title).forEach((token) => {
-      counts.set(token, (counts.get(token) || 0) + 1);
-    });
+  articles.forEach((article) => {
+    titleTokens(article.title).forEach((token) => counts.set(token, (counts.get(token) || 0) + 1));
   });
 
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([token]) => token.replace(/\b\w/g, (char) => char.toUpperCase()));
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([token]) => titleCase(token));
 }
 
 function compactText(value = "") {
-  return String(value)
-    .replace(/\s+/g, " ")
-    .replace(/\.\.\.+/g, ".")
-    .trim();
+  return String(value).replace(/\s+/g, " ").replace(/\.\.\.+/g, ".").trim();
 }
 
 function toSentence(value = "") {
@@ -154,32 +97,18 @@ function toSentence(value = "") {
     .replace(/(Read more|Also read|Watch live|Live updates).*$/i, "")
     .trim();
 
-  if (!cleaned) {
-    return "";
-  }
-
-  const firstSentence = cleaned.match(/[^.!?]+[.!?]?/);
-  const sentence = (firstSentence?.[0] || cleaned).trim();
-  if (!sentence) {
-    return "";
-  }
-
+  if (!cleaned) return "";
+  const sentence = (cleaned.match(/[^.!?]+[.!?]?/)?.[0] || cleaned).trim();
+  if (!sentence) return "";
   return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;
 }
 
 function normalizeForCompare(value = "") {
-  return compactText(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return compactText(value).toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function buildSummary(articles) {
-  const candidateSentences = articles
-    .map((article) => toSentence(article.summary || article.title))
-    .filter(Boolean);
-
+  const candidateSentences = articles.map((article) => toSentence(article.summary || article.title)).filter(Boolean);
   const leadSentence = candidateSentences[0] || toSentence(articles[0]?.title || "Grouped story");
   const leadNormalized = normalizeForCompare(leadSentence);
   const secondarySentence = candidateSentences.find((sentence) => {
@@ -204,17 +133,16 @@ function buildCluster(group, index) {
 
   const sourceCount = new Set(articles.map((article) => article.sourceId)).size;
   const freshness = Math.max(...articles.map((article) => toTimestamp(article.publishedAt)), 0);
-  const leadImage = articles.find((article) => article.image)?.image || "";
 
   return {
     id: `story-${index + 1}`,
     title: articles[0]?.title || "Grouped story",
     summary: buildSummary(articles),
-    theme: pickTheme({ articles }),
+    theme: pickTheme(articles),
     transparency: transparencyLabel(sourceCount),
-    signals: buildSignals({ articles }),
+    signals: buildSignals(articles),
     publishedAt: freshness ? new Date(freshness).toISOString() : null,
-    image: leadImage,
+    image: articles.find((article) => article.image)?.image || "",
     sourceCount,
     rankScore: sourceCount * 100 + freshness / 100000000,
     sources: articles.map((article) => ({
@@ -231,9 +159,7 @@ function buildCluster(group, index) {
 
 export function groupAndRankArticles(inputArticles, options = {}) {
   const minSimilarity = options.minSimilarity ?? 0.34;
-  const articles = dedupeByLink(inputArticles).sort(
-    (a, b) => toTimestamp(b.publishedAt) - toTimestamp(a.publishedAt)
-  );
+  const articles = dedupeByLink(inputArticles).sort((a, b) => toTimestamp(b.publishedAt) - toTimestamp(a.publishedAt));
   const groups = [];
 
   for (const article of articles) {
@@ -252,13 +178,9 @@ export function groupAndRankArticles(inputArticles, options = {}) {
     if (bestGroup && bestScore >= minSimilarity) {
       bestGroup.articles.push(article);
       bestGroup.tokens = Array.from(new Set([...bestGroup.tokens, ...tokens]));
-      continue;
+    } else {
+      groups.push({ articles: [article], tokens });
     }
-
-    groups.push({
-      articles: [article],
-      tokens
-    });
   }
 
   return groups

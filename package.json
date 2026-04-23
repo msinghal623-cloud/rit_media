@@ -4,12 +4,18 @@
   "type": "module",
   "scripts": {
     "dev": "netlify dev",
-    "build": "echo \"Static site build complete\"",
-    "refresh:news": "netlify functions:invoke refresh-news-background"
+    "dev:next": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:migrate": "node scripts/db/migrate.js",
+    "refresh:news": "node scripts/refresh-news.js",
+    "check": "next build"
   },
   "dependencies": {
-    "@netlify/blobs": "^8.1.0",
-    "@netlify/functions": "^3.1.8",
-    "fast-xml-parser": "^4.5.0"
+    "@neondatabase/serverless": "^1.0.1",
+    "fast-xml-parser": "^4.5.0",
+    "next": "^16.2.4",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   }
 }
