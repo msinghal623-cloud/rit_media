@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "netlify dev",
-    "dev:next": "next dev",
+    "dev": "next dev",
+    "dev:netlify": "netlify dev",
     "build": "next build",
     "start": "next start",
     "db:reset": "node scripts/db/reset.js",

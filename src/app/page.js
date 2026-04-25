@@ -8,20 +8,32 @@ function track(eventName, params) {
   }
 }
 
-function formatDate(value) {
-  if (!value) return "Latest";
-  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(new Date(value));
+function formatDateTime(value) {
+  if (!value) return "Unknown";
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
+function titleCase(value = "") {
+  return String(value).replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function storyImage(story) {
   if (story.image) return story.image;
-  return (story.sources || []).find((source) => source.image)?.image || "";
+  return (story.articles || []).find((article) => article.image)?.image || "";
+}
+
+function storyLocation(story) {
+  return [story.district, story.region, story.country].filter(Boolean).join(", ") || "Location pending";
 }
 
 function StoryCard({ story }) {
   const [open, setOpen] = useState(false);
-  const visibleSources = useMemo(() => (story.sources || []).slice(0, story.sourceCount > 3 ? 6 : 3), [story]);
-  const signals = story.signals?.length ? story.signals : ["Grouped from overlapping headlines"];
+  const visibleArticles = useMemo(() => (story.articles || []).slice(0, story.publisherCount > 3 ? 6 : 3), [story]);
   const imageUrl = storyImage(story);
 
   return (
@@ -30,51 +42,54 @@ function StoryCard({ story }) {
         {imageUrl ? <div className="story-hero-media" style={{ backgroundImage: `url("${imageUrl.replace(/"/g, "%22")}")` }} /> : null}
         <div className="story-top">
           <div className="story-meta">
-            <span>{story.theme || "Top story"}</span>
-            <span>{formatDate(story.publishedAt)}</span>
-            <span>{story.sourceCount || 0} sources</span>
+            <span>{titleCase(story.topic || "general")}</span>
+            <span>{formatDateTime(story.publishedAt)}</span>
+            <span>{story.publisherCount || 0} publishers</span>
           </div>
-          <div className="score-chip">{story.transparency || "Transparency: limited"}</div>
+          <div className="score-chip">Importance {story.importanceScore || 0}</div>
         </div>
         <div className="story-heading-wrap">
           <button className="headline-btn" onClick={() => setOpen((value) => !value)}>
-            {story.title}
+            {story.canonicalTitle}
           </button>
           <div className="story-heading-badges">
-            <span className="story-badge">{(story.sourceCount || visibleSources.length) > 3 ? "6-source view" : "3-source view"}</span>
-            <span className="story-badge">{story.theme || "Top story"}</span>
+            <span className="story-badge">{story.storyStatus || "developing"}</span>
+            <span className="story-badge">{story.language || "en"}</span>
+            <span className="story-badge">{storyLocation(story)}</span>
           </div>
         </div>
       </div>
 
       <div className="story-body">
-        <p className="story-summary">{story.summary}</p>
+        <p className="story-summary">{story.summary || "Summary pending for this story cluster."}</p>
         <div className="signal-row">
-          {signals.map((signal) => <span className="tag" key={signal}>{signal}</span>)}
+          <span className="tag">Topic: {titleCase(story.topic || "general")}</span>
+          <span className="tag">Status: {story.storyStatus || "developing"}</span>
+          <span className="tag">Publishers: {story.publisherCount || 0}</span>
         </div>
-        <div className={`source-list ${visibleSources.length > 3 ? "is-expanded" : "is-compact"}`}>
-          {visibleSources.map((source, index) => (
-            <div className="source-item" key={`${source.sourceId}-${index}`}>
+        <div className={`source-list ${visibleArticles.length > 3 ? "is-expanded" : "is-compact"}`}>
+          {visibleArticles.map((article) => (
+            <div className="source-item" key={article.articleId}>
               <div className="source-left">
-                <div className="source-name">{source.sourceName}</div>
-                <div className="source-framing">{source.framing}</div>
-                <div className="source-title">{source.title}</div>
+                <div className="source-name">{article.publisherName}</div>
+                <div className="source-framing">{article.publisherDomain}</div>
+                <div className="source-title">{article.title}</div>
               </div>
               <a
                 className="source-pill"
-                href={source.link}
+                href={article.articleUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() => track("source_open", { source: source.sourceId, story: story.id })}
+                onClick={() => track("article_open", { publisher: article.publisherDomain, story: story.id })}
               >
-                Open source
+                Open article
               </a>
             </div>
           ))}
         </div>
         {open ? (
           <div className="story-detail">
-            This grouped story combines overlapping reporting from multiple publishers in the latest refresh snapshot.
+            <strong>Story record:</strong> topic `{story.topic || "general"}`, status `{story.storyStatus || "developing"}`, location `{storyLocation(story)}`.
           </div>
         ) : null}
       </div>
@@ -84,11 +99,7 @@ function StoryCard({ story }) {
 
 export default function Home() {
   const [stories, setStories] = useState([]);
-  const [status, setStatus] = useState("Loading prepared news snapshot...");
-  const [email, setEmail] = useState("");
-  const [waitlistOpen, setWaitlistOpen] = useState(false);
-  const [thanks, setThanks] = useState(false);
-  const [selectedInterests, setSelectedInterests] = useState(new Set());
+  const [status, setStatus] = useState("Loading news stories from the database...");
 
   useEffect(() => {
     let cancelled = false;
@@ -102,16 +113,16 @@ export default function Home() {
         if (cancelled) return;
         setStories(payload.stories || []);
         setStatus(payload.generatedAt
-          ? `Last refresh: ${new Date(payload.generatedAt).toLocaleString("en-IN")}. ${payload.articleCount || 0} saved articles grouped into ${payload.groupedStoryCount || 0} stories.`
+          ? `Last refresh: ${new Date(payload.generatedAt).toLocaleString("en-IN")}. ${payload.articleCount || 0} articles mapped into ${payload.storyCount || 0} stories.`
           : (payload.message || "No stories exist yet."));
         track("feed_loaded", {
           article_count: payload.articleCount || 0,
-          grouped_story_count: payload.groupedStoryCount || 0
+          story_count: payload.storyCount || 0
         });
       } catch (error) {
         if (cancelled) return;
         setStories([]);
-        setStatus("Could not load the prepared feed from the local API.");
+        setStatus("Could not load stored stories from the local API.");
         track("feed_error", { message: error.message || "Unknown error" });
       }
     }
@@ -122,42 +133,6 @@ export default function Home() {
     };
   }, []);
 
-  async function markInterest(interest) {
-    setSelectedInterests((current) => new Set([...current, interest]));
-    track("interest_click", { interest });
-
-    await fetch("/api/interest", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ interest })
-    }).catch(() => {});
-  }
-
-  async function submitWaitlist(event) {
-    event.preventDefault();
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail) return;
-
-    const response = await fetch("/api/waitlist", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: trimmedEmail, origin: "homepage" })
-    });
-
-    if (response.ok) {
-      setWaitlistOpen(false);
-      setThanks(true);
-      setEmail("");
-      track("waitlist_submit");
-    }
-  }
-
-  function revealWaitlist(origin) {
-    setWaitlistOpen(true);
-    document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth", block: "center" });
-    track("waitlist_reveal", { origin });
-  }
-
   return (
     <>
       <header className="topbar">
@@ -166,10 +141,10 @@ export default function Home() {
             <div className="brand-mark">RIT</div>
             <div className="brand-copy">
               <h1>rit-media</h1>
-              <p>same story. many sources. visible framing</p>
+              <p>stories, articles, publishers</p>
             </div>
           </div>
-          <button className="top-cta" onClick={() => revealWaitlist("topbar")}>Get early access</button>
+          <div className="top-note">Central schema: `publishers`, `stories`, `articles`</div>
         </div>
       </header>
 
@@ -178,74 +153,38 @@ export default function Home() {
           <div className="container">
             <div className="hero-head">
               <div>
-                <div className="eyebrow">India demo . live grouped headlines</div>
-                <h2>One story. Many sources. You decide.</h2>
+                <div className="eyebrow">News Aggregator MVP Schema</div>
+                <h2>Stored stories linked directly to publishers and articles.</h2>
               </div>
             </div>
 
-            <section className="story-section" aria-label="Grouped stories feed">
-              <div className="story-toolbar">
-                <p className="feed-status">{status}</p>
-              </div>
+            <section className="summary-panel" aria-label="Snapshot summary">
+              <div className="section-kicker">Snapshot</div>
+              <p className="feed-status">{status}</p>
+            </section>
+
+            <section className="story-section" aria-label="Stories feed">
               <div className={`story-rail ${stories.length ? "" : "loading"}`} aria-live="polite">
                 {stories.length ? stories.map((story) => <StoryCard story={story} key={story.id} />) : (
                   <article className="story-card story-card-placeholder">
                     <div className="story-hero story-hero-placeholder">
                       <div className="story-top">
-                        <div className="story-meta"><span>No grouped stories yet</span><span>Awaiting refresh</span></div>
-                        <div className="score-chip">Feed not ready</div>
+                        <div className="story-meta"><span>No stories yet</span><span>Awaiting refresh</span></div>
+                        <div className="score-chip">Schema ready</div>
                       </div>
-                      <div className="headline-static">Run the database reset or migration, then refresh the news pipeline to build the first story set.</div>
+                      <div className="headline-static">Run `pnpm refresh:news` to populate `publishers`, `stories`, and `articles`.</div>
                     </div>
                   </article>
                 )}
               </div>
             </section>
-
-            <div className="bottom-grid">
-              <section className="interest-panel">
-                <div className="section-kicker">Interest test</div>
-                <h3>Would you use this?</h3>
-                <div className="interest-row">
-                  {[
-                    ["daily_compare", "I would compare daily", "Use this instead of reading one outlet."],
-                    ["local_news", "I want local news", "District and city stories like this."],
-                    ["bias_signals", "I want bias signals", "Show framing and missing context clearly."],
-                    ["transparency", "I care about transparency", "Show source differences before opinion."]
-                  ].map(([id, title, copy]) => (
-                    <button
-                      className={`interest-btn ${selectedInterests.has(id) ? "is-selected" : ""}`}
-                      key={id}
-                      onClick={() => markInterest(id)}
-                    >
-                      <strong>{title}</strong>
-                      <span>{copy}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <aside className="waitlist-panel" id="waitlist">
-                <div className="section-kicker">Early access</div>
-                <h3>Want the first version?</h3>
-                <p className="waitlist-copy">Join only if you would actually want to use this when it becomes real.</p>
-                <button className="waitlist-btn" onClick={() => revealWaitlist("panel")}>Get early access</button>
-                {waitlistOpen ? (
-                  <form className="waitlist-form is-open" onSubmit={submitWaitlist}>
-                    <input type="email" placeholder="Enter your email" required value={email} onChange={(event) => setEmail(event.target.value)} />
-                    <button type="submit" className="submit-btn">Join waitlist</button>
-                  </form>
-                ) : null}
-                {thanks ? <div className="thank-you is-visible">Thanks - your interest was recorded.</div> : null}
-              </aside>
-            </div>
           </div>
         </section>
       </main>
 
       <footer className="footer">
         <div className="container">
-          <p>rit-media . source comparison . transparency signals . reader judgment</p>
+          <p>rit-media . canonical story records backed by publisher and article rows</p>
         </div>
       </footer>
     </>

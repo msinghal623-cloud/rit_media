@@ -39,7 +39,7 @@ export function storySimilarity(titleA, titleB) {
 function dedupeByLink(articles) {
   const seen = new Set();
   return articles.filter((article) => {
-    const key = `${article.sourceId}:${article.link}`;
+    const key = `${article.publisherDomain}:${article.articleUrl}`;
     if (seen.has(key)) {
       return false;
     }
@@ -57,18 +57,7 @@ function classifyFraming(title) {
   return "General report framing";
 }
 
-function transparencyLabel(sourceCount) {
-  if (sourceCount >= 5) return "Transparency: high";
-  if (sourceCount >= 3) return "Transparency: medium-high";
-  if (sourceCount >= 2) return "Transparency: medium";
-  return "Transparency: limited";
-}
-
-function titleCase(value) {
-  return value.replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function pickTheme(articles) {
+function pickTopic(articles) {
   const counts = new Map();
   articles.forEach((article) => {
     (article.categories || []).forEach((category) => {
@@ -77,17 +66,11 @@ function pickTheme(articles) {
     });
   });
 
-  const winner = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  return winner ? titleCase(winner) : "Top story";
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "general";
 }
 
-function buildSignals(articles) {
-  const counts = new Map();
-  articles.forEach((article) => {
-    titleTokens(article.title).forEach((token) => counts.set(token, (counts.get(token) || 0) + 1));
-  });
-
-  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([token]) => titleCase(token));
+function pickField(articles, fieldName, fallback = null) {
+  return articles.find((article) => article[fieldName])?.[fieldName] || fallback;
 }
 
 function compactText(value = "") {
@@ -135,29 +118,38 @@ function buildCluster(group, index) {
     return toTimestamp(b.publishedAt) - toTimestamp(a.publishedAt);
   });
 
-  const sourceCount = new Set(articles.map((article) => article.sourceId)).size;
+  const publisherCount = new Set(articles.map((article) => article.publisherDomain)).size;
   const freshness = Math.max(...articles.map((article) => toTimestamp(article.publishedAt)), 0);
 
   return {
     id: `story-${index + 1}`,
     title: articles[0]?.title || "Grouped story",
     summary: buildSummary(articles),
-    theme: pickTheme(articles),
-    transparency: transparencyLabel(sourceCount),
-    signals: buildSignals(articles),
+    topic: pickTopic(articles),
+    country: pickField(articles, "country"),
+    region: pickField(articles, "region"),
+    district: pickField(articles, "district"),
+    language: pickField(articles, "language"),
+    storyStatus: "developing",
+    importanceScore: publisherCount,
     publishedAt: freshness ? new Date(freshness).toISOString() : null,
     image: articles.find((article) => article.image)?.image || "",
-    sourceCount,
-    rankScore: sourceCount * 100 + freshness / 100000000,
-    sources: articles.map((article) => ({
+    publisherCount,
+    rankScore: publisherCount * 100 + freshness / 100000000,
+    articles: articles.map((article) => ({
       articleId: article.id,
-      sourceId: article.sourceId,
-      sourceName: article.sourceName,
-      framing: classifyFraming(article.title),
+      publisherId: article.publisherId,
+      publisherDomain: article.publisherDomain,
+      publisherName: article.publisherName,
       title: article.title,
-      link: article.link,
+      summary: article.summary || "",
+      contentText: article.contentText || "",
+      articleUrl: article.articleUrl,
       publishedAt: article.publishedAt,
-      image: article.image || ""
+      image: article.image || "",
+      language: article.language,
+      country: article.country,
+      framing: classifyFraming(article.title)
     }))
   };
 }
@@ -190,6 +182,6 @@ export function groupAndRankArticles(inputArticles, options = {}) {
 
   return groups
     .map((group, index) => buildCluster(group, index))
-    .filter((group) => group.sourceCount >= 2)
+    .filter((group) => group.publisherCount >= 2)
     .sort((a, b) => b.rankScore - a.rankScore);
 }

@@ -19,8 +19,8 @@ function buildPayload({ stories, diagnostics }) {
 
   return {
     generatedAt: new Date().toISOString(),
-    articleCount: stories.reduce((count, story) => count + (story.sources?.length || 0), 0),
-    groupedStoryCount: stories.length,
+    articleCount: stories.reduce((count, story) => count + (story.articles?.length || 0), 0),
+    storyCount: stories.length,
     successfulSources,
     failedSources,
     diagnostics,
@@ -99,7 +99,7 @@ export async function refreshNewsSnapshot() {
     const storyId = await upsertStory(story, match?.id || null);
     await replaceStoryArticles(
       storyId,
-      (story.sources || []).map((source) => source.articleId)
+      (story.articles || []).map((article) => article.articleId)
     );
 
     activeStoryIds.push(storyId);
@@ -118,8 +118,8 @@ export async function readCurrentSnapshot() {
 
   return {
     generatedAt: stories[0]?.publishedAt || null,
-    articleCount: stories.reduce((count, story) => count + (story.sources?.length || 0), 0),
-    groupedStoryCount: stories.length,
+    articleCount: stories.reduce((count, story) => count + (story.articles?.length || 0), 0),
+    storyCount: stories.length,
     stories
   };
 }

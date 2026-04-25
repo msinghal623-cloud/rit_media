@@ -7,13 +7,13 @@ export async function GET() {
   try {
     const snapshot = await readCurrentSnapshot();
 
-    if (!snapshot || !snapshot.groupedStoryCount) {
+    if (!snapshot || !snapshot.storyCount) {
       return Response.json({
         generatedAt: null,
         articleCount: 0,
-        groupedStoryCount: 0,
+        storyCount: 0,
         stories: [],
-        message: "No processed stories exist yet. Run pnpm refresh:news after configuring DATABASE_URL."
+        message: "No stored stories exist yet. Run pnpm refresh:news after configuring DATABASE_URL."
       });
     }
 
@@ -27,7 +27,7 @@ export async function GET() {
     return Response.json({
       generatedAt: null,
       articleCount: 0,
-      groupedStoryCount: 0,
+      storyCount: 0,
       stories: [],
       message: error.message || "Could not read the stored stories."
     }, { status: isMissingDatabase ? 200 : 500 });

@@ -50,13 +50,25 @@ function normalizeRssItem(item, source, feedUrl) {
     sourceName: source.name,
     sourcePriority: source.priority,
     sourceUrl: source.siteUrl,
+    publisher: {
+      name: source.name,
+      domain: source.domain,
+      siteUrl: source.siteUrl,
+      logoUrl: source.logoUrl,
+      country: source.country,
+      language: source.language,
+      isActive: true
+    },
     feedUrl,
     title: stripHtml(item.title),
     link: absoluteUrl(stripHtml(item.link), source.siteUrl),
     summary: stripHtml(item.description || item["content:encoded"] || item.summary || ""),
+    contentText: stripHtml(item["content:encoded"] || item.description || item.summary || ""),
     publishedAt: item.pubDate || item.published || item.updated || "",
     image: pickImage(item, source.siteUrl),
-    categories
+    categories,
+    language: source.language,
+    country: source.country
   };
 
   if (!article.title || !article.link) {
