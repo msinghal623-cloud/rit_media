@@ -4,20 +4,20 @@ const STOPWORDS = new Set([
   "their", "this", "to", "was", "will", "with", "india", "indian"
 ]);
 
-function toTimestamp(value) {
+export function toTimestamp(value) {
   const parsed = Date.parse(value || "");
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-function normalizeText(value = "") {
+export function normalizeText(value = "") {
   return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function titleTokens(value) {
+export function titleTokens(value) {
   return normalizeText(value).split(" ").filter((token) => token.length > 2 && !STOPWORDS.has(token));
 }
 
-function jaccard(tokensA, tokensB) {
+export function jaccard(tokensA, tokensB) {
   const setA = new Set(tokensA);
   const setB = new Set(tokensB);
   const union = new Set([...setA, ...setB]);
@@ -30,6 +30,10 @@ function jaccard(tokensA, tokensB) {
   });
 
   return union.size ? intersection / union.size : 0;
+}
+
+export function storySimilarity(titleA, titleB) {
+  return jaccard(titleTokens(titleA), titleTokens(titleB));
 }
 
 function dedupeByLink(articles) {
@@ -67,7 +71,7 @@ function titleCase(value) {
 function pickTheme(articles) {
   const counts = new Map();
   articles.forEach((article) => {
-    article.categories.forEach((category) => {
+    (article.categories || []).forEach((category) => {
       const key = normalizeText(category);
       if (key) counts.set(key, (counts.get(key) || 0) + 1);
     });
@@ -146,6 +150,7 @@ function buildCluster(group, index) {
     sourceCount,
     rankScore: sourceCount * 100 + freshness / 100000000,
     sources: articles.map((article) => ({
+      articleId: article.id,
       sourceId: article.sourceId,
       sourceName: article.sourceName,
       framing: classifyFraming(article.title),

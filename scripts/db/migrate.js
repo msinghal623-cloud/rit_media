@@ -1,3 +1,4 @@
+import "../load-env.js";
 import { ensureSchema } from "../../src/lib/db.js";
 
 await ensureSchema();

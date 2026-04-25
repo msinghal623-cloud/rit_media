@@ -148,27 +148,19 @@ button {
   font-size: 0.95rem;
 }
 
-.story-rail-shell {
-  overflow: hidden;
-}
-
 .story-rail {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(320px, 72%);
-  gap: 16px;
-  overflow-x: auto;
-  padding: 2px 0 16px;
-  scroll-snap-type: x mandatory;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  padding: 2px 0 12px;
 }
 
 .story-card {
-  scroll-snap-align: start;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
-  min-height: 560px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -415,10 +407,6 @@ button {
 
   .top-cta {
     width: 100%;
-  }
-
-  .story-rail {
-    grid-auto-columns: minmax(288px, 92%);
   }
 
   .source-list.is-expanded,

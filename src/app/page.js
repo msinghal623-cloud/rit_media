@@ -102,8 +102,8 @@ export default function Home() {
         if (cancelled) return;
         setStories(payload.stories || []);
         setStatus(payload.generatedAt
-          ? `Last refresh: ${new Date(payload.generatedAt).toLocaleString("en-IN")}. ${payload.articleCount || 0} articles processed into ${payload.groupedStoryCount || 0} grouped stories.`
-          : (payload.message || "No snapshot exists yet."));
+          ? `Last refresh: ${new Date(payload.generatedAt).toLocaleString("en-IN")}. ${payload.articleCount || 0} saved articles grouped into ${payload.groupedStoryCount || 0} stories.`
+          : (payload.message || "No stories exist yet."));
         track("feed_loaded", {
           article_count: payload.articleCount || 0,
           grouped_story_count: payload.groupedStoryCount || 0
@@ -187,20 +187,18 @@ export default function Home() {
               <div className="story-toolbar">
                 <p className="feed-status">{status}</p>
               </div>
-              <div className="story-rail-shell">
-                <div className={`story-rail ${stories.length ? "" : "loading"}`} aria-live="polite">
-                  {stories.length ? stories.map((story) => <StoryCard story={story} key={story.id} />) : (
-                    <article className="story-card story-card-placeholder">
-                      <div className="story-hero story-hero-placeholder">
-                        <div className="story-top">
-                          <div className="story-meta"><span>No grouped stories yet</span><span>Awaiting refresh</span></div>
-                          <div className="score-chip">Feed not ready</div>
-                        </div>
-                        <div className="headline-static">Run the local database migration and refresh command to build the first snapshot.</div>
+              <div className={`story-rail ${stories.length ? "" : "loading"}`} aria-live="polite">
+                {stories.length ? stories.map((story) => <StoryCard story={story} key={story.id} />) : (
+                  <article className="story-card story-card-placeholder">
+                    <div className="story-hero story-hero-placeholder">
+                      <div className="story-top">
+                        <div className="story-meta"><span>No grouped stories yet</span><span>Awaiting refresh</span></div>
+                        <div className="score-chip">Feed not ready</div>
                       </div>
-                    </article>
-                  )}
-                </div>
+                      <div className="headline-static">Run the database reset or migration, then refresh the news pipeline to build the first story set.</div>
+                    </div>
+                  </article>
+                )}
               </div>
             </section>
 

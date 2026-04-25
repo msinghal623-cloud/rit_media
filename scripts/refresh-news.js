@@ -1,3 +1,4 @@
+import "./load-env.js";
 import { refreshNewsSnapshot } from "../src/lib/news-pipeline.js";
 
 const snapshot = await refreshNewsSnapshot();
