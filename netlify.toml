@@ -1,18 +1,9 @@
 [build]
-  publish = "."
+  command = "pnpm build"
+  publish = ".next"
   functions = "netlify/functions"
 
-[[redirects]]
-  from = "/api/news-feed"
-  to = "/.netlify/functions/news-feed"
-  status = 200
-
-[[redirects]]
-  from = "/api/refresh-news"
-  to = "/.netlify/functions/refresh-news-background"
-  status = 200
-
-[[redirects]]
-  from = "/api/story-image"
-  to = "/.netlify/functions/story-image"
-  status = 200
+[dev]
+  command = "pnpm dev:next"
+  port = 8888
+  targetPort = 3000

@@ -1,33 +1,79 @@
+import { refreshNewsSnapshot } from "../../src/lib/news-pipeline.js";
+import { finishJobRun, startJobRun } from "../../src/lib/db.js";
+
 export const config = {
   schedule: "@hourly"
 };
 
-export default async (request) => {
-  const origin = new URL(request.url).origin;
-  const headers = {
-    "content-type": "application/json"
-  };
+async function invokeContentExtraction(request) {
+  const url = new URL("/.netlify/functions/extract-content-background", request.url).toString();
 
-  if (process.env.REFRESH_SECRET) {
-    headers["x-refresh-secret"] = process.env.REFRESH_SECRET;
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ source: "scheduled-refresh", startedAt: new Date().toISOString() })
+    });
+
+    console.log("Content extraction background function invoked.", {
+      status: response.status
+    });
+
+    return { ok: response.ok, status: response.status };
+  } catch (error) {
+    console.error("Could not invoke content extraction background function.", {
+      message: error?.message || "Unknown error"
+    });
+
+    return { ok: false, error: error?.message || "Unknown error" };
   }
+}
 
-  const response = await fetch(`${origin}/.netlify/functions/refresh-news-background`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ trigger: "scheduled" })
+export default async (req) => {
+  const payload = await req.json().catch(() => ({}));
+  const nextRun = payload?.next_run || null;
+  const jobRunId = await startJobRun("refresh-news-scheduled", {
+    nextRun,
+    source: "netlify-scheduled-function"
   });
 
-  return new Response(
-    JSON.stringify({
-      ok: response.ok,
-      status: response.status
-    }),
-    {
-      status: response.ok ? 200 : 500,
-      headers: {
-        "content-type": "application/json; charset=utf-8"
+  try {
+    const snapshot = await refreshNewsSnapshot();
+    const extractionInvoke = await invokeContentExtraction(req);
+
+    console.log("Scheduled refresh completed.", {
+      nextRun,
+      storyCount: snapshot.storyCount,
+      articleCount: snapshot.articleCount,
+      successfulSources: snapshot.successfulSources,
+      failedSources: snapshot.failedSources
+    });
+
+    await finishJobRun(jobRunId, {
+      status: "success",
+      message: "Scheduled RSS refresh and story grouping completed.",
+      metadata: {
+        storyCount: snapshot.storyCount,
+        articleCount: snapshot.articleCount,
+        successfulSources: snapshot.successfulSources,
+        failedSources: snapshot.failedSources,
+        extractionInvoke
       }
-    }
-  );
+    });
+
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    console.error("Scheduled refresh failed.", {
+      nextRun,
+      message: error?.message || "Unknown error"
+    });
+
+    await finishJobRun(jobRunId, {
+      status: "failed",
+      message: error?.message || "Scheduled refresh failed.",
+      metadata: { nextRun }
+    });
+
+    return new Response(null, { status: 500 });
+  }
 };

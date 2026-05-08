@@ -1,17 +1,46 @@
+## Local Setup
+
+1. Install dependencies with `pnpm install`.
+2. Create `.env.local` from `.env.example`.
+3. Paste your Neon connection string into `DATABASE_URL`.
+4. Set `REFRESH_SECRET` to any local secret.
+5. Run `pnpm db:reset` once to recreate the central schema.
+6. Run `pnpm refresh:news` to fetch RSS articles, store publishers and articles, and rebuild stories.
+7. Run `pnpm dev` and open the local Next.js URL.
+
+## Local Test Flow Before Pushing
+
+- `pnpm db:reset` recreates the `publishers`, `stories`, and `articles` tables from scratch.
+- `pnpm db:migrate` verifies the Neon database connection and ensures the schema exists.
+- `pnpm refresh:news` verifies RSS ingestion, publisher upserts, article storage, story grouping, and Postgres writes.
+- `pnpm build` verifies the Next.js production build.
+- `pnpm dev` runs the frontend and backend API routes locally through Next.js.
+
 ## Netlify Setup
 
-1. Install dependencies with `npm install`.
-2. Deploy to Netlify.
-3. Add environment variable `REFRESH_SECRET` in Netlify.
-4. After first deploy, trigger `POST /api/refresh-news` with header `x-refresh-secret: <your secret>` once to create the first snapshot.
-5. Netlify scheduled function `refresh-news-scheduled` will refresh the feed every hour after that.
+1. Connect the GitHub repo to Netlify.
+2. Use `pnpm build` as the build command and `.next` as the publish directory.
+3. Add `DATABASE_URL`, `REFRESH_SECRET`, and `NEXT_PUBLIC_GA_ID` in Netlify environment variables.
+4. After deploy, trigger `POST /api/refresh-news` with header `x-refresh-secret: <your secret>` once.
+5. Netlify scheduled function `refresh-news-scheduled` will refresh RSS articles and stories every hour after that.
+6. Netlify background function `extract-content-background` is invoked after refresh and keeps extracting article content in 10-minute runs until the current queue is drained.
+
+## Local URLs
+
+- Local app and API routes: `http://localhost:3000`
+- Local scheduled function testing is optional. If you want to debug the Netlify function itself, use `pnpm dev:netlify` and `netlify functions:invoke refresh-news-scheduled`.
 
 ## How It Works
 
-- `refresh-news-scheduled` runs hourly.
-- It calls `refresh-news-background`.
-- The background function fetches RSS feeds, groups overlapping stories, ranks them, and stores the result in Netlify Blobs.
-- `news-feed` returns the latest stored snapshot to the homepage.
+- Next.js renders the frontend.
+- Next.js route handlers provide `/api/news-feed`, `/api/refresh-news`, and `/api/story-image`.
+- `publishers` stores source-level metadata such as name, domain, country, and language.
+- `articles` stores fetched article records and links each row to its publisher and optional story.
+- `stories` stores the canonical grouped story record with topic, location, status, and importance fields.
+- The refresh route and scheduled function prune old articles, regroup the current article set, write story rows, and set `articles.story_id`.
+- Full article content extraction runs separately in the background so the hourly refresh stays fast enough for scheduled function limits.
+- Scheduled and background function runs are also recorded in the `job_runs` table with status, timestamps, messages, and metadata for debugging.
+- The homepage reads the prepared stories from `/api/news-feed`.
 
 ## Current RSS Source Set
 
