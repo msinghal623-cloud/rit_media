@@ -39,6 +39,7 @@
 - `stories` stores the canonical grouped story record with topic, location, status, and importance fields.
 - The refresh route and scheduled function prune old articles, regroup the current article set, write story rows, and set `articles.story_id`.
 - Full article content extraction runs separately in the background so the hourly refresh stays fast enough for scheduled function limits.
+- Scheduled and background function runs are also recorded in the `job_runs` table with status, timestamps, messages, and metadata for debugging.
 - The homepage reads the prepared stories from `/api/news-feed`.
 
 ## Current RSS Source Set

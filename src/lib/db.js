@@ -28,6 +28,15 @@ function normalizeText(value, maxLength = null) {
   return maxLength ? cleaned.slice(0, maxLength) : cleaned;
 }
 
+function normalizeJson(value) {
+  if (value === undefined || value === null) return null;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+}
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -131,11 +140,88 @@ export async function ensureSchema() {
       sql`CREATE UNIQUE INDEX IF NOT EXISTS articles_rss_article_url_key ON articles (rss_article_url)`,
       sql`CREATE INDEX IF NOT EXISTS articles_story_id_idx ON articles (story_id)`,
       sql`CREATE INDEX IF NOT EXISTS articles_publisher_id_idx ON articles (publisher_id)`,
-      sql`CREATE INDEX IF NOT EXISTS articles_rss_published_at_idx ON articles (rss_published_at DESC NULLS LAST)`
+      sql`CREATE INDEX IF NOT EXISTS articles_rss_published_at_idx ON articles (rss_published_at DESC NULLS LAST)`,
+      sql`CREATE TABLE IF NOT EXISTS job_runs (
+        id BIGSERIAL PRIMARY KEY,
+        job_name TEXT NOT NULL,
+        status VARCHAR(30) NOT NULL,
+        message TEXT,
+        metadata JSONB,
+        started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        finished_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      sql`CREATE INDEX IF NOT EXISTS job_runs_job_name_started_at_idx ON job_runs (job_name, started_at DESC)`,
+      sql`CREATE INDEX IF NOT EXISTS job_runs_status_idx ON job_runs (status)`
     ]));
   }
 
   return schemaReady;
+}
+
+export async function startJobRun(jobName, metadata = {}) {
+  await ensureSchema();
+  const sql = getSql();
+
+  const rows = await withDatabaseRetry(() => sql`
+    INSERT INTO job_runs (
+      job_name,
+      status,
+      metadata,
+      started_at
+    )
+    VALUES (
+      ${jobName},
+      'running',
+      ${normalizeJson(metadata)}::jsonb,
+      NOW()
+    )
+    RETURNING id
+  `);
+
+  return rows[0]?.id || null;
+}
+
+export async function finishJobRun(jobRunId, { status = "success", message = "", metadata = {} } = {}) {
+  if (!jobRunId) {
+    return null;
+  }
+
+  await ensureSchema();
+  const sql = getSql();
+
+  const rows = await withDatabaseRetry(() => sql`
+    UPDATE job_runs
+    SET
+      status = ${normalizeText(status, 30) || "success"},
+      message = ${normalizeText(message)},
+      metadata = COALESCE(metadata, '{}'::jsonb) || COALESCE(${normalizeJson(metadata)}::jsonb, '{}'::jsonb),
+      finished_at = NOW()
+    WHERE id = ${jobRunId}
+    RETURNING id, status
+  `);
+
+  return rows[0] || null;
+}
+
+export async function readRecentJobRuns(limit = 50) {
+  await ensureSchema();
+  const sql = getSql();
+
+  return withDatabaseRetry(() => sql`
+    SELECT
+      id,
+      job_name AS "jobName",
+      status,
+      message,
+      metadata,
+      started_at AS "startedAt",
+      finished_at AS "finishedAt",
+      created_at AS "createdAt"
+    FROM job_runs
+    ORDER BY started_at DESC
+    LIMIT ${Math.max(1, Number(limit) || 50)}
+  `);
 }
 
 export async function upsertPublisher(source) {

@@ -1,4 +1,5 @@
 import { extractPendingArticleContent } from "../../src/lib/news-pipeline.js";
+import { finishJobRun, startJobRun } from "../../src/lib/db.js";
 
 const RUN_BUDGET_MS = 10 * 60 * 1000;
 
@@ -22,6 +23,11 @@ async function invokeNextRun(request) {
 
 export default async (request) => {
   const payload = await request.json().catch(() => ({}));
+  const jobRunId = await startJobRun("extract-content-background", {
+    chained: Boolean(payload?.chained),
+    source: payload?.source || "background-function",
+    budgetMs: RUN_BUDGET_MS
+  });
 
   try {
     const result = await extractPendingArticleContent({ maxDurationMs: RUN_BUDGET_MS });
@@ -32,6 +38,17 @@ export default async (request) => {
       stoppedDueToTime: result.stoppedDueToTime
     });
 
+    await finishJobRun(jobRunId, {
+      status: "success",
+      message: "Background content extraction run completed.",
+      metadata: {
+        attemptedCount: result.attemptedCount,
+        stoppedDueToTime: result.stoppedDueToTime,
+        diagnosticsCount: result.diagnostics?.length || 0,
+        chained: Boolean(payload?.chained)
+      }
+    });
+
     if (result.stoppedDueToTime && result.attemptedCount > 0) {
       await invokeNextRun(request);
     }
@@ -39,6 +56,11 @@ export default async (request) => {
     console.error("Content extraction background run failed.", {
       chained: Boolean(payload?.chained),
       message: error?.message || "Unknown error"
+    });
+    await finishJobRun(jobRunId, {
+      status: "failed",
+      message: error?.message || "Background content extraction failed.",
+      metadata: { chained: Boolean(payload?.chained) }
     });
     throw error;
   }
