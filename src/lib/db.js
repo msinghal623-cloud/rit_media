@@ -2,6 +2,7 @@ import { neon } from "@neondatabase/serverless";
 
 let sqlClient;
 let schemaReady;
+const publisherCache = new Map();
 
 export function getSql() {
   if (!process.env.DATABASE_URL) {
@@ -27,6 +28,35 @@ function normalizeText(value, maxLength = null) {
   return maxLength ? cleaned.slice(0, maxLength) : cleaned;
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientDatabaseError(error) {
+  const message = `${error?.message || ""} ${error?.sourceError?.message || ""} ${error?.sourceError?.cause?.message || ""} ${error?.sourceError?.cause?.code || ""}`;
+  return /fetch failed|ENOTFOUND|ETIMEDOUT|ECONNRESET|UND_ERR_CONNECT_TIMEOUT|Connect Timeout/i.test(message);
+}
+
+async function withDatabaseRetry(operation, retries = 3) {
+  let lastError;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+
+      if (!isTransientDatabaseError(error) || attempt === retries) {
+        throw error;
+      }
+
+      await delay(1000 * (attempt + 1));
+    }
+  }
+
+  throw lastError;
+}
+
 function publisherDomain(source = {}) {
   try {
     return new URL(source.siteUrl || source.baseUrl || source.sourceUrl || "").hostname.replace(/^www\./, "");
@@ -38,23 +68,20 @@ function publisherDomain(source = {}) {
 export async function resetSchema() {
   const sql = getSql();
 
-  await sql.transaction([
-    sql`DROP TABLE IF EXISTS story_articles CASCADE`,
-    sql`DROP TABLE IF EXISTS interest_events CASCADE`,
-    sql`DROP TABLE IF EXISTS waitlist_signups CASCADE`,
+  await withDatabaseRetry(() => sql.transaction([
     sql`DROP TABLE IF EXISTS articles CASCADE`,
     sql`DROP TABLE IF EXISTS stories CASCADE`,
     sql`DROP TABLE IF EXISTS publishers CASCADE`,
-    sql`DROP TABLE IF EXISTS news_snapshots CASCADE`
-  ]);
+  ]));
 
   schemaReady = undefined;
+  publisherCache.clear();
 }
 
 export async function ensureSchema() {
   if (!schemaReady) {
     const sql = getSql();
-    schemaReady = sql.transaction([
+    schemaReady = withDatabaseRetry(() => sql.transaction([
       sql`CREATE TABLE IF NOT EXISTS publishers (
         id BIGSERIAL PRIMARY KEY,
         name TEXT NOT NULL,
@@ -88,21 +115,24 @@ export async function ensureSchema() {
         id BIGSERIAL PRIMARY KEY,
         publisher_id BIGINT NOT NULL REFERENCES publishers(id),
         story_id BIGINT REFERENCES stories(id) ON DELETE SET NULL,
-        title TEXT NOT NULL,
-        summary TEXT,
+        rss_title TEXT NOT NULL,
+        rss_description TEXT,
+        rss_category TEXT,
         content_text TEXT,
-        article_url TEXT NOT NULL UNIQUE,
-        image_url TEXT,
+        author TEXT,
+        extraction_status VARCHAR(30),
+        extraction_error TEXT,
+        rss_article_url TEXT NOT NULL UNIQUE,
+        rss_image_url TEXT,
         language VARCHAR(10),
-        published_at TIMESTAMPTZ,
-        fetched_at TIMESTAMPTZ,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        rss_published_at TIMESTAMPTZ,
+        fetched_at TIMESTAMPTZ
       )`,
+      sql`CREATE UNIQUE INDEX IF NOT EXISTS articles_rss_article_url_key ON articles (rss_article_url)`,
       sql`CREATE INDEX IF NOT EXISTS articles_story_id_idx ON articles (story_id)`,
       sql`CREATE INDEX IF NOT EXISTS articles_publisher_id_idx ON articles (publisher_id)`,
-      sql`CREATE INDEX IF NOT EXISTS articles_published_at_idx ON articles (published_at DESC NULLS LAST)`
-    ]);
+      sql`CREATE INDEX IF NOT EXISTS articles_rss_published_at_idx ON articles (rss_published_at DESC NULLS LAST)`
+    ]));
   }
 
   return schemaReady;
@@ -117,7 +147,11 @@ export async function upsertPublisher(source) {
     throw new Error(`Could not derive publisher domain for source "${source?.name || "unknown"}".`);
   }
 
-  const rows = await sql`
+  if (publisherCache.has(domain)) {
+    return publisherCache.get(domain);
+  }
+
+  const rows = await withDatabaseRetry(() => sql`
     INSERT INTO publishers (
       name,
       domain,
@@ -148,8 +182,9 @@ export async function upsertPublisher(source) {
       is_active = EXCLUDED.is_active,
       updated_at = NOW()
     RETURNING id, name, domain
-  `;
+  `);
 
+  publisherCache.set(domain, rows[0]);
   return rows[0];
 }
 
@@ -164,47 +199,101 @@ export async function upsertArticle(article, fetchedAt = new Date().toISOString(
     language: article.language
   });
 
-  const publishedAt = normalizeDate(article.publishedAt);
-  const fetchedAtValue = normalizeDate(fetchedAt) || new Date().toISOString();
+  const publishedAt = normalizeDate(article.rssPublishedAt || article.publishedAt);
+  const fetchedAtValue = normalizeDate(article.fetchedAt || fetchedAt) || new Date().toISOString();
+  const rssCategory = Array.isArray(article.categories)
+    ? article.categories.filter(Boolean).join(", ")
+    : article.rssCategory || article.categories;
 
-  const rows = await sql`
+  const rows = await withDatabaseRetry(() => sql`
     INSERT INTO articles (
       publisher_id,
-      title,
-      summary,
+      rss_title,
+      rss_description,
+      rss_category,
       content_text,
-      article_url,
-      image_url,
+      author,
+      extraction_status,
+      extraction_error,
+      rss_article_url,
+      rss_image_url,
       language,
-      published_at,
-      fetched_at,
-      updated_at
+      rss_published_at,
+      fetched_at
     )
     VALUES (
       ${publisher.id},
-      ${article.title},
-      ${normalizeText(article.summary)},
-      ${normalizeText(article.contentText || article.summary)},
-      ${article.link},
-      ${normalizeText(article.image)},
+      ${article.rssTitle || article.title},
+      ${normalizeText(article.rssDescription || article.summary)},
+      ${normalizeText(rssCategory)},
+      ${normalizeText(article.contentText)},
+      ${normalizeText(article.author)},
+      ${normalizeText(article.extractionStatus, 30) || "rss_only"},
+      ${normalizeText(article.extractionError)},
+      ${article.rssArticleUrl || article.link},
+      ${normalizeText(article.rssImageUrl || article.image)},
       ${normalizeText(article.language || article.publisher?.language || article.source?.language, 10)},
       ${publishedAt},
-      ${fetchedAtValue},
-      NOW()
+      ${fetchedAtValue}
     )
-    ON CONFLICT (article_url) DO UPDATE
+    ON CONFLICT (rss_article_url) DO UPDATE
     SET
       publisher_id = EXCLUDED.publisher_id,
-      title = EXCLUDED.title,
-      summary = EXCLUDED.summary,
+      rss_title = EXCLUDED.rss_title,
+      rss_description = EXCLUDED.rss_description,
+      rss_category = EXCLUDED.rss_category,
       content_text = EXCLUDED.content_text,
-      image_url = EXCLUDED.image_url,
+      author = EXCLUDED.author,
+      extraction_status = EXCLUDED.extraction_status,
+      extraction_error = EXCLUDED.extraction_error,
+      rss_image_url = EXCLUDED.rss_image_url,
       language = EXCLUDED.language,
-      published_at = EXCLUDED.published_at,
-      fetched_at = EXCLUDED.fetched_at,
-      updated_at = NOW()
-    RETURNING id, publisher_id, story_id, title, article_url
-  `;
+      rss_published_at = EXCLUDED.rss_published_at,
+      fetched_at = EXCLUDED.fetched_at
+    RETURNING id, publisher_id, story_id, rss_title AS title, rss_article_url AS article_url
+  `);
+
+  return rows[0];
+}
+
+export async function readArticlesForExtraction({ publisherDomain = "", limit = 2, excludeArticleIds = [] } = {}) {
+  await ensureSchema();
+  const sql = getSql();
+  const excludedIds = [...new Set(excludeArticleIds)].filter(Boolean);
+
+  return withDatabaseRetry(() => sql`
+    SELECT
+      a.id,
+      a.rss_article_url AS "rssArticleUrl",
+      a.extraction_status AS "extractionStatus",
+      p.domain AS "publisherDomain",
+      p.name AS "publisherName"
+    FROM articles a
+    JOIN publishers p ON p.id = a.publisher_id
+    WHERE COALESCE(a.extraction_status, 'rss_only') <> 'full'
+      AND a.rss_article_url IS NOT NULL
+      AND a.rss_article_url <> ''
+      AND (${publisherDomain || null}::TEXT IS NULL OR p.domain = ${publisherDomain})
+      AND (${excludedIds.length ? excludedIds : null}::BIGINT[] IS NULL OR NOT (a.id = ANY(${excludedIds})))
+    ORDER BY RANDOM()
+    LIMIT ${limit}
+  `);
+}
+
+export async function updateArticleExtraction(articleId, extraction) {
+  await ensureSchema();
+  const sql = getSql();
+
+  const rows = await withDatabaseRetry(() => sql`
+    UPDATE articles
+    SET
+      content_text = ${normalizeText(extraction.contentText)},
+      author = ${normalizeText(extraction.author)},
+      extraction_status = ${normalizeText(extraction.extractionStatus, 30) || "rss_only"},
+      extraction_error = ${normalizeText(extraction.extractionError)}
+    WHERE id = ${articleId}
+    RETURNING id, extraction_status AS "extractionStatus"
+  `);
 
   return rows[0];
 }
@@ -214,8 +303,56 @@ export async function deleteOldArticles(days = 14) {
   const sql = getSql();
   await sql`
     DELETE FROM articles
-    WHERE COALESCE(published_at, fetched_at, created_at) < NOW() - ${days} * INTERVAL '1 day'
+    WHERE COALESCE(rss_published_at, fetched_at) < NOW() - ${days} * INTERVAL '1 day'
   `;
+}
+
+export async function deleteExcessArticles(maxArticles = 3000) {
+  await ensureSchema();
+  const sql = getSql();
+  const normalizedMax = Math.max(0, Number(maxArticles) || 0);
+
+  if (!normalizedMax) {
+    return 0;
+  }
+
+  const rows = await withDatabaseRetry(() => sql`
+    WITH article_count AS (
+      SELECT COUNT(*)::int AS count FROM articles
+    ),
+    story_sizes AS (
+      SELECT story_id, COUNT(*)::int AS article_count
+      FROM articles
+      WHERE story_id IS NOT NULL
+      GROUP BY story_id
+    ),
+    deletion_candidates AS (
+      SELECT
+        a.id,
+        ROW_NUMBER() OVER (
+          ORDER BY
+            CASE WHEN a.story_id IS NULL THEN 0 ELSE COALESCE(ss.article_count, 1) END ASC,
+            COALESCE(a.rss_published_at, a.fetched_at) ASC NULLS FIRST,
+            a.id ASC
+        ) AS delete_rank
+      FROM articles a
+      LEFT JOIN story_sizes ss ON ss.story_id = a.story_id
+    ),
+    deleted AS (
+      DELETE FROM articles
+      WHERE id IN (
+        SELECT dc.id
+        FROM deletion_candidates dc
+        CROSS JOIN article_count ac
+        WHERE dc.delete_rank <= GREATEST(ac.count - ${normalizedMax}, 0)
+      )
+      RETURNING id
+    )
+    SELECT COUNT(*)::int AS "deletedCount"
+    FROM deleted
+  `);
+
+  return rows[0]?.deletedCount || 0;
 }
 
 export async function readRecentArticles(days = 14) {
@@ -230,21 +367,24 @@ export async function readRecentArticles(days = 14) {
       p.base_url AS "publisherBaseUrl",
       NULL::INT AS "sourcePriority",
       a.fetched_at AS "fetchedAt",
-      a.published_at AS "publishedAt",
-      a.title,
-      COALESCE(a.summary, '') AS summary,
+      a.rss_published_at AS "publishedAt",
+      a.rss_title AS title,
+      COALESCE(a.rss_description, '') AS summary,
       a.content_text AS "contentText",
-      a.article_url AS "articleUrl",
-      COALESCE(a.image_url, '') AS image,
+      a.rss_article_url AS "articleUrl",
+      COALESCE(a.rss_image_url, '') AS image,
       a.language,
-      NULL::TEXT[] AS categories,
+      CASE
+        WHEN a.rss_category IS NULL OR a.rss_category = '' THEN NULL::TEXT[]
+        ELSE string_to_array(a.rss_category, ', ')
+      END AS categories,
       p.country,
       NULL::VARCHAR(100) AS region,
       NULL::VARCHAR(100) AS district
     FROM articles a
     JOIN publishers p ON p.id = a.publisher_id
-    WHERE COALESCE(a.published_at, a.fetched_at, a.created_at) >= NOW() - ${days} * INTERVAL '1 day'
-    ORDER BY COALESCE(a.published_at, a.fetched_at, a.created_at) DESC
+    WHERE COALESCE(a.rss_published_at, a.fetched_at) >= NOW() - ${days} * INTERVAL '1 day'
+    ORDER BY COALESCE(a.rss_published_at, a.fetched_at) DESC
   `;
 }
 
@@ -252,7 +392,16 @@ export async function readStoriesIndex() {
   await ensureSchema();
   const sql = getSql();
   return sql`
-    SELECT id, canonical_title AS title
+    SELECT
+      id,
+      canonical_title AS title,
+      summary,
+      topic,
+      country,
+      region,
+      district,
+      language,
+      updated_at AS "updatedAt"
     FROM stories
     ORDER BY updated_at DESC
   `;
@@ -328,7 +477,7 @@ export async function replaceStoryArticles(storyId, articleIds) {
   const sql = getSql();
   const distinctArticleIds = [...new Set(articleIds)].filter(Boolean);
 
-  await sql`UPDATE articles SET story_id = NULL, updated_at = NOW() WHERE story_id = ${storyId}`;
+  await sql`UPDATE articles SET story_id = NULL WHERE story_id = ${storyId}`;
 
   if (!distinctArticleIds.length) {
     return;
@@ -336,7 +485,7 @@ export async function replaceStoryArticles(storyId, articleIds) {
 
   await sql`
     UPDATE articles
-    SET story_id = ${storyId}, updated_at = NOW()
+    SET story_id = ${storyId}
     WHERE id = ANY(${distinctArticleIds})
   `;
 }
@@ -384,13 +533,13 @@ export async function readFeedStories(limit = 12) {
       s.region,
       s.district,
       s.importance_score AS "importanceScore",
-      MAX(a.published_at) AS "publishedAt",
+      MAX(a.rss_published_at) AS "publishedAt",
       COUNT(DISTINCT a.publisher_id)::int AS "publisherCount",
-      MAX(a.image_url) FILTER (WHERE a.image_url IS NOT NULL AND a.image_url <> '') AS image
+      MAX(a.rss_image_url) FILTER (WHERE a.rss_image_url IS NOT NULL AND a.rss_image_url <> '') AS image
     FROM stories s
     JOIN articles a ON a.story_id = s.id
     GROUP BY s.id
-    ORDER BY COUNT(DISTINCT a.publisher_id) DESC, MAX(a.published_at) DESC NULLS LAST, s.updated_at DESC
+    ORDER BY COUNT(DISTINCT a.publisher_id) DESC, MAX(a.rss_published_at) DESC NULLS LAST, s.updated_at DESC
     LIMIT ${limit}
   `;
 
@@ -406,18 +555,18 @@ export async function readFeedStories(limit = 12) {
       p.id AS "publisherId",
       p.domain AS "publisherDomain",
       p.name AS "publisherName",
-      a.title,
-      COALESCE(a.summary, '') AS summary,
+      a.rss_title AS title,
+      COALESCE(a.rss_description, '') AS summary,
       COALESCE(a.content_text, '') AS "contentText",
-      a.article_url AS "articleUrl",
-      a.published_at AS "publishedAt",
-      a.image_url AS image,
+      a.rss_article_url AS "articleUrl",
+      a.rss_published_at AS "publishedAt",
+      a.rss_image_url AS image,
       a.language,
       p.country
     FROM articles a
     JOIN publishers p ON p.id = a.publisher_id
     WHERE a.story_id = ANY(${storyIds})
-    ORDER BY COALESCE(a.published_at, a.fetched_at, a.created_at) DESC
+    ORDER BY COALESCE(a.rss_published_at, a.fetched_at) DESC
   `;
 
   const articlesByStoryId = new Map();

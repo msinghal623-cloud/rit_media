@@ -28,7 +28,7 @@ function storyImage(story) {
 }
 
 function storyLocation(story) {
-  return [story.district, story.region, story.country].filter(Boolean).join(", ") || "Location pending";
+  return [story.district, story.region, story.country].filter(Boolean).join(", ") || "India";
 }
 
 function StoryCard({ story }) {
@@ -44,7 +44,7 @@ function StoryCard({ story }) {
           <div className="story-meta">
             <span>{titleCase(story.topic || "general")}</span>
             <span>{formatDateTime(story.publishedAt)}</span>
-            <span>{story.publisherCount || 0} publishers</span>
+            <span>{story.publisherCount || 0} sources</span>
           </div>
           <div className="score-chip">Importance {story.importanceScore || 0}</div>
         </div>
@@ -65,7 +65,7 @@ function StoryCard({ story }) {
         <div className="signal-row">
           <span className="tag">Topic: {titleCase(story.topic || "general")}</span>
           <span className="tag">Status: {story.storyStatus || "developing"}</span>
-          <span className="tag">Publishers: {story.publisherCount || 0}</span>
+          <span className="tag">Sources: {story.publisherCount || 0}</span>
         </div>
         <div className={`source-list ${visibleArticles.length > 3 ? "is-expanded" : "is-compact"}`}>
           {visibleArticles.map((article) => (
@@ -89,7 +89,7 @@ function StoryCard({ story }) {
         </div>
         {open ? (
           <div className="story-detail">
-            <strong>Story record:</strong> topic `{story.topic || "general"}`, status `{story.storyStatus || "developing"}`, location `{storyLocation(story)}`.
+            <strong>Coverage note:</strong> This story is developing across {story.publisherCount || 0} sources, with the latest update from {formatDateTime(story.publishedAt)}.
           </div>
         ) : null}
       </div>
@@ -99,7 +99,7 @@ function StoryCard({ story }) {
 
 export default function Home() {
   const [stories, setStories] = useState([]);
-  const [status, setStatus] = useState("Loading news stories from the database...");
+  const [status, setStatus] = useState("Loading the latest stories...");
 
   useEffect(() => {
     let cancelled = false;
@@ -113,8 +113,8 @@ export default function Home() {
         if (cancelled) return;
         setStories(payload.stories || []);
         setStatus(payload.generatedAt
-          ? `Last refresh: ${new Date(payload.generatedAt).toLocaleString("en-IN")}. ${payload.articleCount || 0} articles mapped into ${payload.storyCount || 0} stories.`
-          : (payload.message || "No stories exist yet."));
+          ? `Updated ${new Date(payload.generatedAt).toLocaleString("en-IN")}. ${payload.storyCount || 0} stories from ${payload.articleCount || 0} reports.`
+          : (payload.message || "No stories are available yet."));
         track("feed_loaded", {
           article_count: payload.articleCount || 0,
           story_count: payload.storyCount || 0
@@ -122,7 +122,7 @@ export default function Home() {
       } catch (error) {
         if (cancelled) return;
         setStories([]);
-        setStatus("Could not load stored stories from the local API.");
+        setStatus("Could not load the latest stories. Please try again shortly.");
         track("feed_error", { message: error.message || "Unknown error" });
       }
     }
@@ -141,10 +141,10 @@ export default function Home() {
             <div className="brand-mark">RIT</div>
             <div className="brand-copy">
               <h1>rit-media</h1>
-              <p>stories, articles, publishers</p>
+              <p>India news tracker</p>
             </div>
           </div>
-          <div className="top-note">Central schema: `publishers`, `stories`, `articles`</div>
+          <div className="top-note">Live story clusters</div>
         </div>
       </header>
 
@@ -153,8 +153,8 @@ export default function Home() {
           <div className="container">
             <div className="hero-head">
               <div>
-                <div className="eyebrow">News Aggregator MVP Schema</div>
-                <h2>Stored stories linked directly to publishers and articles.</h2>
+                <div className="eyebrow">Developing Stories</div>
+                <h2>Follow the news as it forms across trusted sources.</h2>
               </div>
             </div>
 
@@ -170,9 +170,9 @@ export default function Home() {
                     <div className="story-hero story-hero-placeholder">
                       <div className="story-top">
                         <div className="story-meta"><span>No stories yet</span><span>Awaiting refresh</span></div>
-                        <div className="score-chip">Schema ready</div>
+                        <div className="score-chip">Preparing feed</div>
                       </div>
-                      <div className="headline-static">Run `pnpm refresh:news` to populate `publishers`, `stories`, and `articles`.</div>
+                      <div className="headline-static">Fresh stories will appear here soon.</div>
                     </div>
                   </article>
                 )}
@@ -184,7 +184,7 @@ export default function Home() {
 
       <footer className="footer">
         <div className="container">
-          <p>rit-media . canonical story records backed by publisher and article rows</p>
+          <p>rit-media brings related reports together so you can scan the day faster.</p>
         </div>
       </footer>
     </>

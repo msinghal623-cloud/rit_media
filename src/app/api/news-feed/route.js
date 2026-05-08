@@ -13,7 +13,7 @@ export async function GET() {
         articleCount: 0,
         storyCount: 0,
         stories: [],
-        message: "No stored stories exist yet. Run pnpm refresh:news after configuring DATABASE_URL."
+        message: "No stories are available yet. Please check back shortly."
       });
     }
 
@@ -29,7 +29,7 @@ export async function GET() {
       articleCount: 0,
       storyCount: 0,
       stories: [],
-      message: error.message || "Could not read the stored stories."
+      message: "Could not load the latest stories. Please try again shortly."
     }, { status: isMissingDatabase ? 200 : 500 });
   }
 }

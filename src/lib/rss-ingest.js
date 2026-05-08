@@ -1,6 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
+import { getParserForSource } from "./source-parsers/parser-registry.js";
 
-const parser = new XMLParser({
+const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "",
   trimValues: true
@@ -11,102 +12,102 @@ function asArray(value) {
   return Array.isArray(value) ? value : [value];
 }
 
-function stripHtml(value = "") {
-  return String(value)
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/\s+/g, " ")
-    .trim();
+const DEFAULT_USER_AGENTS = [
+  "rit-media/2.0 (+https://rit-media.netlify.app)",
+  "Mozilla/5.0 (compatible; rit-media/2.0; +https://rit-media.netlify.app)"
+];
+
+function userAgentForAttempt(attempt, userAgents = DEFAULT_USER_AGENTS) {
+  const agents = userAgents.length ? userAgents : DEFAULT_USER_AGENTS;
+  return agents[attempt % agents.length];
 }
 
-function absoluteUrl(url, baseUrl) {
-  try {
-    return new URL(url, baseUrl).toString();
-  } catch {
-    return url || "";
-  }
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function pickImage(item, baseUrl) {
-  const mediaContent = asArray(item["media:content"]).map((entry) => entry?.url).filter(Boolean);
-  const mediaThumbnail = asArray(item["media:thumbnail"]).map((entry) => entry?.url).filter(Boolean);
-  const enclosure = typeof item.enclosure === "object" ? item.enclosure?.url : "";
-  const imageNode = typeof item.image === "object" ? item.image?.url || item.image?.href : "";
-  const rawMarkup = String(item["content:encoded"] || item.description || "");
-  const inlineImage = rawMarkup.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
-  const candidate = mediaContent[0] || mediaThumbnail[0] || enclosure || imageNode || inlineImage;
-  return absoluteUrl(candidate, baseUrl);
-}
+export async function fetchWithRetry(url, options = {}) {
+  const retries = options.retries ?? 2;
+  const timeoutMs = options.timeoutMs ?? 10000;
+  let lastError;
 
-function normalizeRssItem(item, source, feedUrl) {
-  const categories = asArray(item.category)
-    .map((value) => (typeof value === "string" ? value : value?.["#text"]))
-    .filter(Boolean);
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-  const article = {
-    id: `${source.id}:${(item.guid?.["#text"] || item.guid || item.link || item.title || "").slice(0, 180)}`,
-    sourceId: source.id,
-    sourceName: source.name,
-    sourcePriority: source.priority,
-    sourceUrl: source.siteUrl,
-    publisher: {
-      name: source.name,
-      domain: source.domain,
-      siteUrl: source.siteUrl,
-      logoUrl: source.logoUrl,
-      country: source.country,
-      language: source.language,
-      isActive: true
-    },
-    feedUrl,
-    title: stripHtml(item.title),
-    link: absoluteUrl(stripHtml(item.link), source.siteUrl),
-    summary: stripHtml(item.description || item["content:encoded"] || item.summary || ""),
-    contentText: stripHtml(item["content:encoded"] || item.description || item.summary || ""),
-    publishedAt: item.pubDate || item.published || item.updated || "",
-    image: pickImage(item, source.siteUrl),
-    categories,
-    language: source.language,
-    country: source.country
-  };
+    try {
+      const response = await fetch(url, {
+        ...options.fetchOptions,
+        signal: controller.signal,
+        headers: {
+          "user-agent": userAgentForAttempt(attempt, options.userAgents),
+          accept: options.accept || "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          ...(options.fetchOptions?.headers || {})
+        }
+      });
 
-  if (!article.title || !article.link) {
-    return null;
-  }
+      clearTimeout(timeout);
 
-  return article;
-}
+      if (response.ok) {
+        return response;
+      }
 
-export async function fetchFeedArticles(source, feedUrl) {
-  const response = await fetch(feedUrl, {
-    headers: {
-      "user-agent": "rit-media/2.0 (+https://rit-media.netlify.app)"
+      lastError = new Error(`Request failed for ${url}: ${response.status}`);
+
+      if ([401, 403, 429].includes(response.status)) {
+        lastError.blocked = true;
+        throw lastError;
+      }
+    } catch (error) {
+      clearTimeout(timeout);
+      lastError = error;
+
+      if (error.blocked || attempt === retries) {
+        throw error;
+      }
     }
+
+    await delay(Math.min(1000 * (attempt + 1), 3000));
+  }
+
+  throw lastError || new Error(`Request failed for ${url}`);
+}
+
+export async function fetchFeedArticles(source, feedUrl, sourceParser = getParserForSource(source), options = {}) {
+  const response = await fetchWithRetry(feedUrl, {
+    accept: "application/rss+xml,application/atom+xml,application/xml,text/xml,*/*;q=0.8",
+    retries: options.retries,
+    timeoutMs: options.timeoutMs,
+    userAgents: options.userAgents
   });
 
-  if (!response.ok) {
-    throw new Error(`Feed request failed for ${source.name}: ${response.status}`);
-  }
-
   const xml = await response.text();
-  const parsed = parser.parse(xml);
+  const parsed = xmlParser.parse(xml);
   const items = asArray(parsed?.rss?.channel?.item || parsed?.feed?.entry);
 
-  return items.map((item) => normalizeRssItem(item, source, feedUrl)).filter(Boolean);
+  return items.map((item) => sourceParser.parseRssItem(item, source, feedUrl)).filter(Boolean);
 }
 
 export async function fetchSourceArticles(source, options = {}) {
-  const limitPerFeed = options.limitPerFeed ?? 10;
-  const results = await Promise.allSettled(source.feeds.map((feedUrl) => fetchFeedArticles(source, feedUrl)));
+  const limitPerFeed = Number.isFinite(options.limitPerFeed) ? options.limitPerFeed : null;
+  const sourceParser = getParserForSource(source);
+  const results = await Promise.allSettled(
+    source.feeds.map((feedUrl) => fetchFeedArticles(source, feedUrl, sourceParser, options))
+  );
   const articles = [];
   const diagnostics = [];
 
   results.forEach((result, index) => {
     const feedUrl = source.feeds[index];
     if (result.status === "fulfilled") {
-      articles.push(...result.value.slice(0, limitPerFeed));
-      diagnostics.push({ feedUrl, ok: true, articleCount: result.value.length });
+      const feedArticles = limitPerFeed ? result.value.slice(0, limitPerFeed) : result.value;
+      articles.push(...feedArticles);
+      diagnostics.push({
+        feedUrl,
+        ok: true,
+        articleCount: result.value.length,
+        returnedArticleCount: feedArticles.length
+      });
       return;
     }
 

@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "rit-media - stories, articles, publishers",
-  description: "A news aggregator MVP backed by central publishers, stories, and articles tables."
+  title: "rit-media - India news tracker",
+  description: "Follow developing India news stories across trusted sources."
 };
 
 export default function RootLayout({ children }) {

@@ -17,6 +17,10 @@ export function titleTokens(value) {
   return normalizeText(value).split(" ").filter((token) => token.length > 2 && !STOPWORDS.has(token));
 }
 
+function textTokens(value) {
+  return titleTokens(value);
+}
+
 export function jaccard(tokensA, tokensB) {
   const setA = new Set(tokensA);
   const setB = new Set(tokensB);
@@ -32,8 +36,93 @@ export function jaccard(tokensA, tokensB) {
   return union.size ? intersection / union.size : 0;
 }
 
-export function storySimilarity(titleA, titleB) {
-  return jaccard(titleTokens(titleA), titleTokens(titleB));
+function categoryTokens(article = {}) {
+  const categories = Array.isArray(article.categories)
+    ? article.categories
+    : [article.topic, article.category].filter(Boolean);
+  return categories.flatMap((category) => textTokens(category));
+}
+
+function timeProximity(valueA, valueB) {
+  const timestampA = toTimestamp(valueA);
+  const timestampB = toTimestamp(valueB);
+
+  if (!timestampA || !timestampB) {
+    return 0;
+  }
+
+  const hoursApart = Math.abs(timestampA - timestampB) / (1000 * 60 * 60);
+  return Math.max(0, 1 - hoursApart / 72);
+}
+
+function languageCountryScore(articleA = {}, articleB = {}) {
+  const languageScore = articleA.language && articleB.language && articleA.language === articleB.language ? 0.5 : 0;
+  const countryScore = articleA.country && articleB.country && articleA.country === articleB.country ? 0.5 : 0;
+  return languageScore + countryScore;
+}
+
+function storyComparable(value) {
+  if (typeof value === "string") {
+    return { title: value };
+  }
+
+  return value || {};
+}
+
+export function articleSimilarity(articleA = {}, articleB = {}) {
+  const titleScore = jaccard(titleTokens(articleA.title), titleTokens(articleB.title));
+  const summaryScore = jaccard(textTokens(articleA.summary || articleA.contentText), textTokens(articleB.summary || articleB.contentText));
+  const categoryScore = jaccard(categoryTokens(articleA), categoryTokens(articleB));
+  const timeScore = timeProximity(articleA.publishedAt, articleB.publishedAt);
+  const placeScore = languageCountryScore(articleA, articleB);
+
+  return (
+    titleScore * 0.45 +
+    summaryScore * 0.25 +
+    categoryScore * 0.15 +
+    timeScore * 0.10 +
+    placeScore * 0.05
+  );
+}
+
+export function storyArticleSimilarity(story = {}, article = {}) {
+  const storyAsArticle = {
+    title: story.title || story.canonicalTitle,
+    summary: story.summary,
+    categories: [story.topic].filter(Boolean),
+    publishedAt: story.publishedAt || story.updatedAt || story.updated_at,
+    language: story.language,
+    country: story.country
+  };
+
+  return articleSimilarity(storyAsArticle, article);
+}
+
+export function storySimilarity(storyA, storyB) {
+  if (typeof storyA === "string" && typeof storyB === "string") {
+    return jaccard(titleTokens(storyA), titleTokens(storyB));
+  }
+
+  const comparableA = storyComparable(storyA);
+  const comparableB = storyComparable(storyB);
+  return articleSimilarity(
+    {
+      title: comparableA.title || comparableA.canonicalTitle,
+      summary: comparableA.summary,
+      categories: [comparableA.topic].filter(Boolean),
+      publishedAt: comparableA.publishedAt || comparableA.updatedAt || comparableA.updated_at,
+      language: comparableA.language,
+      country: comparableA.country
+    },
+    {
+      title: comparableB.title || comparableB.canonicalTitle,
+      summary: comparableB.summary,
+      categories: [comparableB.topic].filter(Boolean),
+      publishedAt: comparableB.publishedAt || comparableB.updatedAt || comparableB.updated_at,
+      language: comparableB.language,
+      country: comparableB.country
+    }
+  );
 }
 
 function dedupeByLink(articles) {
@@ -155,17 +244,16 @@ function buildCluster(group, index) {
 }
 
 export function groupAndRankArticles(inputArticles, options = {}) {
-  const minSimilarity = options.minSimilarity ?? 0.34;
+  const minSimilarity = options.minSimilarity ?? 0.4;
   const articles = dedupeByLink(inputArticles).sort((a, b) => toTimestamp(b.publishedAt) - toTimestamp(a.publishedAt));
   const groups = [];
 
   for (const article of articles) {
-    const tokens = titleTokens(article.title);
     let bestGroup = null;
     let bestScore = 0;
 
     for (const group of groups) {
-      const score = jaccard(tokens, group.tokens);
+      const score = Math.max(...group.articles.map((candidate) => articleSimilarity(article, candidate)));
       if (score > bestScore) {
         bestGroup = group;
         bestScore = score;
@@ -174,14 +262,14 @@ export function groupAndRankArticles(inputArticles, options = {}) {
 
     if (bestGroup && bestScore >= minSimilarity) {
       bestGroup.articles.push(article);
-      bestGroup.tokens = Array.from(new Set([...bestGroup.tokens, ...tokens]));
     } else {
-      groups.push({ articles: [article], tokens });
+      groups.push({ articles: [article] });
     }
   }
 
+  // Single-source stories are valid. Multi-source stories rank higher, but they are not the only stories worth saving.
   return groups
     .map((group, index) => buildCluster(group, index))
-    .filter((group) => group.publisherCount >= 2)
+    .filter((group) => group.articles.length >= 1)
     .sort((a, b) => b.rankScore - a.rankScore);
 }

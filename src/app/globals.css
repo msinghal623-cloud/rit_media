@@ -93,6 +93,7 @@ button {
   color: var(--accent-strong);
   font-size: 0.88rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .submit-btn {
@@ -129,8 +130,8 @@ button {
 .hero h2 {
   max-width: 760px;
   margin: 8px 0 0;
-  font-size: clamp(2.4rem, 7vw, 6rem);
-  line-height: 0.96;
+  font-size: clamp(2.1rem, 6vw, 5.4rem);
+  line-height: 1;
   letter-spacing: 0;
 }
 
@@ -251,8 +252,8 @@ button {
   color: #fff;
   padding: 0;
   text-align: left;
-  font-size: clamp(1.7rem, 4vw, 3.6rem);
-  line-height: 1;
+  font-size: clamp(1.55rem, 3.4vw, 3.2rem);
+  line-height: 1.04;
   font-weight: 800;
   letter-spacing: 0;
 }
@@ -322,12 +323,14 @@ button {
   white-space: nowrap;
   font-size: 0.84rem;
   font-weight: 800;
+  text-align: center;
 }
 
 .story-detail {
   border-left: 3px solid var(--accent);
   color: var(--muted);
   padding-left: 12px;
+  line-height: 1.45;
 }
 
 .footer {
@@ -337,14 +340,78 @@ button {
 }
 
 @media (max-width: 820px) {
+  .container {
+    width: min(100% - 24px, 1180px);
+  }
+
   .topbar-inner,
   .hero-head {
     align-items: flex-start;
   }
 
   .topbar-inner {
-    flex-direction: column;
+    min-height: 64px;
+    padding: 10px 0;
+  }
+
+  .brand-mark {
+    width: 40px;
+    height: 40px;
+    font-size: 0.92rem;
+  }
+
+  .brand-copy h1 {
+    font-size: 1.05rem;
+  }
+
+  .brand-copy p,
+  .top-note {
+    font-size: 0.8rem;
+  }
+
+  .hero {
+    min-height: auto;
+    padding: 28px 0 24px;
+  }
+
+  .hero h2 {
+    font-size: clamp(2rem, 11vw, 3.3rem);
+    line-height: 1.02;
+  }
+
+  .summary-panel {
     padding: 14px 0;
+    margin-bottom: 14px;
+  }
+
+  .story-rail {
+    gap: 14px;
+  }
+
+  .story-hero {
+    min-height: 230px;
+    padding: 14px;
+  }
+
+  .story-meta {
+    gap: 6px;
+    font-size: 0.7rem;
+  }
+
+  .score-chip,
+  .story-badge,
+  .tag {
+    padding: 0.36rem 0.52rem;
+    font-size: 0.72rem;
+  }
+
+  .story-body {
+    padding: 14px;
+    gap: 14px;
+  }
+
+  .story-summary {
+    font-size: 0.98rem;
   }
 
   .source-list.is-expanded {
@@ -356,6 +423,34 @@ button {
   }
 
   .source-pill {
-    width: max-content;
+    width: 100%;
+  }
+}
+
+@media (max-width: 460px) {
+  .topbar-inner {
+    gap: 8px;
+  }
+
+  .top-note {
+    white-space: normal;
+  }
+
+  .story-hero {
+    min-height: 210px;
+  }
+
+  .headline-btn,
+  .headline-static {
+    font-size: 1.45rem;
+  }
+
+  .story-heading-badges,
+  .signal-row {
+    gap: 6px;
+  }
+
+  .source-item {
+    padding: 10px;
   }
 }
