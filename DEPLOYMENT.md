@@ -23,7 +23,7 @@
 3. Add `DATABASE_URL`, `REFRESH_SECRET`, and `NEXT_PUBLIC_GA_ID` in Netlify environment variables.
 4. After deploy, trigger `POST /api/refresh-news` with header `x-refresh-secret: <your secret>` once.
 5. Netlify scheduled function `refresh-news-scheduled` will refresh RSS articles and stories every hour after that.
-6. Netlify background function `extract-content-background` is invoked after refresh and keeps extracting article content in 10-minute runs until the current queue is drained.
+6. Netlify scheduled function `extract-content-scheduled` invokes the background extractor every 15 minutes. The background extractor keeps working in 10-minute runs until the current queue is drained.
 
 ## Local URLs
 
@@ -37,8 +37,8 @@
 - `publishers` stores source-level metadata such as name, domain, country, and language.
 - `articles` stores fetched article records and links each row to its publisher and optional story.
 - `stories` stores the canonical grouped story record with topic, location, status, and importance fields.
-- The refresh route and scheduled function prune old articles, regroup the current article set, write story rows, and set `articles.story_id`.
-- Full article content extraction runs separately in the background so the hourly refresh stays fast enough for scheduled function limits.
+- The refresh route and hourly scheduled function prune old articles, regroup the current article set, write story rows, and set `articles.story_id`.
+- Full article content extraction is launched by its own scheduled function and runs separately in the background so the hourly refresh stays fast enough for scheduled function limits.
 - Scheduled and background function runs are also recorded in the `job_runs` table with status, timestamps, messages, and metadata for debugging.
 - The homepage reads the prepared stories from `/api/news-feed`.
 

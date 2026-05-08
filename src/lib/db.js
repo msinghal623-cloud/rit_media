@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless";
+import { randomUUID } from "node:crypto";
 
 let sqlClient;
 let schemaReady;
@@ -152,7 +153,13 @@ export async function ensureSchema() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
       sql`CREATE INDEX IF NOT EXISTS job_runs_job_name_started_at_idx ON job_runs (job_name, started_at DESC)`,
-      sql`CREATE INDEX IF NOT EXISTS job_runs_status_idx ON job_runs (status)`
+      sql`CREATE INDEX IF NOT EXISTS job_runs_status_idx ON job_runs (status)`,
+      sql`CREATE TABLE IF NOT EXISTS job_locks (
+        lock_name TEXT PRIMARY KEY,
+        owner TEXT NOT NULL,
+        locked_until TIMESTAMPTZ NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`
     ]));
   }
 
@@ -202,6 +209,54 @@ export async function finishJobRun(jobRunId, { status = "success", message = "",
   `);
 
   return rows[0] || null;
+}
+
+export async function acquireJobLock(lockName, ttlMs = 15 * 60 * 1000) {
+  await ensureSchema();
+  const sql = getSql();
+  const owner = randomUUID();
+  const normalizedTtlMs = Math.max(1000, Number(ttlMs) || 1000);
+
+  const rows = await withDatabaseRetry(() => sql`
+    INSERT INTO job_locks (
+      lock_name,
+      owner,
+      locked_until,
+      updated_at
+    )
+    VALUES (
+      ${normalizeText(lockName)},
+      ${owner},
+      NOW() + ${normalizedTtlMs} * INTERVAL '1 millisecond',
+      NOW()
+    )
+    ON CONFLICT (lock_name) DO UPDATE
+    SET
+      owner = EXCLUDED.owner,
+      locked_until = EXCLUDED.locked_until,
+      updated_at = NOW()
+    WHERE job_locks.locked_until <= NOW()
+    RETURNING lock_name AS "lockName", owner, locked_until AS "lockedUntil"
+  `);
+
+  return rows[0] || null;
+}
+
+export async function releaseJobLock(lockName, owner) {
+  if (!lockName || !owner) {
+    return false;
+  }
+
+  await ensureSchema();
+  const sql = getSql();
+  const rows = await withDatabaseRetry(() => sql`
+    DELETE FROM job_locks
+    WHERE lock_name = ${lockName}
+      AND owner = ${owner}
+    RETURNING lock_name
+  `);
+
+  return Boolean(rows[0]);
 }
 
 export async function readRecentJobRuns(limit = 50) {
@@ -328,10 +383,18 @@ export async function upsertArticle(article, fetchedAt = new Date().toISOString(
       rss_title = EXCLUDED.rss_title,
       rss_description = EXCLUDED.rss_description,
       rss_category = EXCLUDED.rss_category,
-      content_text = EXCLUDED.content_text,
-      author = EXCLUDED.author,
-      extraction_status = EXCLUDED.extraction_status,
-      extraction_error = EXCLUDED.extraction_error,
+      content_text = COALESCE(EXCLUDED.content_text, articles.content_text),
+      author = COALESCE(EXCLUDED.author, articles.author),
+      extraction_status = CASE
+        WHEN EXCLUDED.extraction_status IS NULL OR EXCLUDED.extraction_status = 'rss_only'
+          THEN COALESCE(articles.extraction_status, EXCLUDED.extraction_status)
+        ELSE EXCLUDED.extraction_status
+      END,
+      extraction_error = CASE
+        WHEN EXCLUDED.extraction_status IS NULL OR EXCLUDED.extraction_status = 'rss_only'
+          THEN articles.extraction_error
+        ELSE EXCLUDED.extraction_error
+      END,
       rss_image_url = EXCLUDED.rss_image_url,
       language = EXCLUDED.language,
       rss_published_at = EXCLUDED.rss_published_at,
@@ -356,7 +419,7 @@ export async function readArticlesForExtraction({ publisherDomain = "", limit = 
       p.name AS "publisherName"
     FROM articles a
     JOIN publishers p ON p.id = a.publisher_id
-    WHERE COALESCE(a.extraction_status, 'rss_only') <> 'full'
+    WHERE COALESCE(a.extraction_status, 'rss_only') = 'rss_only'
       AND a.rss_article_url IS NOT NULL
       AND a.rss_article_url <> ''
       AND (${publisherDomain || null}::TEXT IS NULL OR p.domain = ${publisherDomain})
@@ -389,7 +452,7 @@ export async function deleteOldArticles(days = 14) {
   const sql = getSql();
   await sql`
     DELETE FROM articles
-    WHERE COALESCE(rss_published_at, fetched_at) < NOW() - ${days} * INTERVAL '1 day'
+    WHERE rss_published_at < NOW() - ${days} * INTERVAL '1 day'
   `;
 }
 
@@ -406,23 +469,15 @@ export async function deleteExcessArticles(maxArticles = 3000) {
     WITH article_count AS (
       SELECT COUNT(*)::int AS count FROM articles
     ),
-    story_sizes AS (
-      SELECT story_id, COUNT(*)::int AS article_count
-      FROM articles
-      WHERE story_id IS NOT NULL
-      GROUP BY story_id
-    ),
     deletion_candidates AS (
       SELECT
         a.id,
         ROW_NUMBER() OVER (
           ORDER BY
-            CASE WHEN a.story_id IS NULL THEN 0 ELSE COALESCE(ss.article_count, 1) END ASC,
-            COALESCE(a.rss_published_at, a.fetched_at) ASC NULLS FIRST,
+            a.rss_published_at ASC NULLS FIRST,
             a.id ASC
         ) AS delete_rank
       FROM articles a
-      LEFT JOIN story_sizes ss ON ss.story_id = a.story_id
     ),
     deleted AS (
       DELETE FROM articles

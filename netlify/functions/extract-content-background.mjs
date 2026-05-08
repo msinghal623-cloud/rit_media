@@ -1,7 +1,8 @@
 import { extractPendingArticleContent } from "../../src/lib/news-pipeline.js";
-import { finishJobRun, startJobRun } from "../../src/lib/db.js";
+import { acquireJobLock, finishJobRun, releaseJobLock, startJobRun } from "../../src/lib/db.js";
 
 const RUN_BUDGET_MS = 10 * 60 * 1000;
+const LOCK_TTL_MS = RUN_BUDGET_MS + 2 * 60 * 1000;
 
 function backgroundFunctionUrl(request) {
   return new URL("/.netlify/functions/extract-content-background", request.url).toString();
@@ -23,13 +24,40 @@ async function invokeNextRun(request) {
 
 export default async (request) => {
   const payload = await request.json().catch(() => ({}));
-  const jobRunId = await startJobRun("extract-content-background", {
-    chained: Boolean(payload?.chained),
-    source: payload?.source || "background-function",
-    budgetMs: RUN_BUDGET_MS
-  });
+  const lock = await acquireJobLock("extract-content-background", LOCK_TTL_MS);
+  let jobRunId = null;
+
+  if (!lock) {
+    jobRunId = await startJobRun("extract-content-background", {
+      chained: Boolean(payload?.chained),
+      source: payload?.source || "background-function",
+      skipped: true,
+      reason: "already-running"
+    });
+
+    console.log("Content extraction background run skipped because another run is active.", {
+      chained: Boolean(payload?.chained)
+    });
+
+    await finishJobRun(jobRunId, {
+      status: "skipped",
+      message: "Background content extraction skipped because another run is active.",
+      metadata: { chained: Boolean(payload?.chained), reason: "already-running" }
+    });
+
+    return;
+  }
+
+  let shouldInvokeNextRun = false;
 
   try {
+    jobRunId = await startJobRun("extract-content-background", {
+      chained: Boolean(payload?.chained),
+      source: payload?.source || "background-function",
+      budgetMs: RUN_BUDGET_MS,
+      lockOwner: lock.owner
+    });
+
     const result = await extractPendingArticleContent({ maxDurationMs: RUN_BUDGET_MS });
 
     console.log("Content extraction background run completed.", {
@@ -50,7 +78,7 @@ export default async (request) => {
     });
 
     if (result.stoppedDueToTime && result.attemptedCount > 0) {
-      await invokeNextRun(request);
+      shouldInvokeNextRun = true;
     }
   } catch (error) {
     console.error("Content extraction background run failed.", {
@@ -63,5 +91,11 @@ export default async (request) => {
       metadata: { chained: Boolean(payload?.chained) }
     });
     throw error;
+  } finally {
+    await releaseJobLock(lock.lockName, lock.owner);
+  }
+
+  if (shouldInvokeNextRun) {
+    await invokeNextRun(request);
   }
 };

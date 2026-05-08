@@ -5,30 +5,6 @@ export const config = {
   schedule: "@hourly"
 };
 
-async function invokeContentExtraction(request) {
-  const url = new URL("/.netlify/functions/extract-content-background", request.url).toString();
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ source: "scheduled-refresh", startedAt: new Date().toISOString() })
-    });
-
-    console.log("Content extraction background function invoked.", {
-      status: response.status
-    });
-
-    return { ok: response.ok, status: response.status };
-  } catch (error) {
-    console.error("Could not invoke content extraction background function.", {
-      message: error?.message || "Unknown error"
-    });
-
-    return { ok: false, error: error?.message || "Unknown error" };
-  }
-}
-
 export default async (req) => {
   const payload = await req.json().catch(() => ({}));
   const nextRun = payload?.next_run || null;
@@ -39,7 +15,6 @@ export default async (req) => {
 
   try {
     const snapshot = await refreshNewsSnapshot();
-    const extractionInvoke = await invokeContentExtraction(req);
 
     console.log("Scheduled refresh completed.", {
       nextRun,
@@ -56,8 +31,7 @@ export default async (req) => {
         storyCount: snapshot.storyCount,
         articleCount: snapshot.articleCount,
         successfulSources: snapshot.successfulSources,
-        failedSources: snapshot.failedSources,
-        extractionInvoke
+        failedSources: snapshot.failedSources
       }
     });
 
